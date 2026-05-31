@@ -322,8 +322,49 @@ def discharge_patient(patient_id):
             wd.available_beds = min(wd.capacity, wd.available_beds + 1)
             wd.occupied_beds = max(0, wd.occupied_beds - 1)
 
+    # ── Running Bill Finalization ──
+    # Calculate stay duration
+    days = (patient.discharge_date - patient.admission_date).days or 1
+    room_charge = 0.0
+    if patient.room:
+        room_charge = round(patient.room.daily_rate * days, 2)
+
+    bill = Bill.query.filter_by(patient_id=patient.id, payment_status='Pending').first()
+    
+    # Stay line items to add
+    new_items = []
+    if room_charge > 0:
+        new_items.append({'description': f'Room {patient.room.room_number} ({days} days)', 'amount': room_charge})
+    new_items.append({'description': 'Doctor Consultation', 'amount': 1000.0})
+    new_items.append({'description': 'Nursing Charges', 'amount': 500.0})
+    
+    added_cost = room_charge + 1500.0
+    
+    if bill:
+        items = json.loads(bill.items_json) if bill.items_json else []
+        items.extend(new_items)
+        bill.items_json = json.dumps(items)
+        bill.subtotal = round(bill.subtotal + added_cost, 2)
+        bill.gst = round(bill.subtotal * 0.05, 2)
+        bill.total = round(bill.subtotal + bill.gst - bill.discount, 2)
+    else:
+        bill_number = f'BILL{datetime.datetime.utcnow().strftime("%Y%m%d%H%M%S")}'
+        gst = round(added_cost * 0.05, 2)
+        bill = Bill(
+            bill_number=bill_number,
+            bill_type='Hospital',
+            patient_id=patient.id,
+            items_json=json.dumps(new_items),
+            subtotal=round(added_cost, 2),
+            gst=gst,
+            discount=0.0,
+            total=round(added_cost + gst, 2),
+            payment_status='Pending'
+        )
+        db.session.add(bill)
+
     db.session.commit()
-    flash('Patient discharged successfully.', 'success')
+    flash('Patient discharged successfully. Final bill generated.', 'success')
     return redirect(url_for('patient_summary', patient_id=patient.id))
 
 
@@ -354,11 +395,40 @@ def prescribe_medicine(patient_id):
     )
     # Deduct stock
     med.quantity -= quantity
-
     db.session.add(prescription)
-    db.session.commit()
 
-    flash(f'Prescribed {quantity} of {med.name} successfully.', 'success')
+    # ── Running Bill Integration ──
+    bill = Bill.query.filter_by(patient_id=patient.id, payment_status='Pending').first()
+    item_cost = round(med.price * quantity, 2)
+    desc = f"{med.name} x{quantity}"
+    
+    if bill:
+        items = json.loads(bill.items_json) if bill.items_json else []
+        items.append({'description': desc, 'amount': item_cost})
+        bill.items_json = json.dumps(items)
+        bill.subtotal = round(bill.subtotal + item_cost, 2)
+        bill.gst = round(bill.subtotal * 0.05, 2)
+        bill.total = round(bill.subtotal + bill.gst - bill.discount, 2)
+    else:
+        bill_number = f'BILL{datetime.datetime.utcnow().strftime("%Y%m%d%H%M%S")}'
+        items = [{'description': desc, 'amount': item_cost}]
+        subtotal = item_cost
+        gst = round(subtotal * 0.05, 2)
+        bill = Bill(
+            bill_number=bill_number,
+            bill_type='Hospital',
+            patient_id=patient.id,
+            items_json=json.dumps(items),
+            subtotal=subtotal,
+            gst=gst,
+            discount=0.0,
+            total=round(subtotal + gst, 2),
+            payment_status='Pending'
+        )
+        db.session.add(bill)
+
+    db.session.commit()
+    flash(f'Prescribed {quantity} of {med.name} successfully. Running bill updated.', 'success')
     return redirect(url_for('patient_summary', patient_id=patient.id))
 
 

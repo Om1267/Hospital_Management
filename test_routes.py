@@ -94,7 +94,7 @@ def test_new_features():
         'disease': 'Diagnosed for Test',
         'doctor_id': '1', # Arjun Sharma
         'ward_id': '1',   # General Ward
-        'room_id': '102'  # Semi-Private
+        'room_id': '2'    # Semi-Private (Room 102)
     }
     
     data = urllib.parse.urlencode(patient_data).encode('utf-8')
