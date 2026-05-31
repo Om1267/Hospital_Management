@@ -26,7 +26,7 @@ from wtforms import (
 from wtforms.validators import DataRequired, Email, Length, Optional, NumberRange
 from werkzeug.security import generate_password_hash, check_password_hash
 
-from models import db, User, Doctor, Nurse, Ward, Room, Patient, Appointment, Medicine, Bill
+from models import db, User, Doctor, Nurse, Ward, Room, Patient, Appointment, Medicine, Bill, Prescription
 from config import Config
 
 from flask_wtf.csrf import CSRFProtect
@@ -291,8 +291,75 @@ def patient_summary(patient_id):
     total_charges = sum(b.subtotal for b in bills)
     gst = total_charges * 0.05
     grand_total = total_charges + gst
+    # Query medicines available for prescription
+    medicines = Medicine.query.filter(Medicine.quantity > 0).all()
     return render_template('summary.html', patient=patient, bills=bills,
-                           total_charges=total_charges, gst=gst, grand_total=grand_total)
+                           total_charges=total_charges, gst=gst, grand_total=grand_total,
+                           medicines=medicines)
+
+
+@app.route('/patients/<int:patient_id>/discharge', methods=['POST'])
+@login_required
+def discharge_patient(patient_id):
+    patient = Patient.query.get_or_404(patient_id)
+    if patient.status == 'Discharged':
+        flash('Patient is already discharged.', 'info')
+        return redirect(url_for('patient_summary', patient_id=patient.id))
+
+    patient.status = 'Discharged'
+    patient.discharge_date = datetime.datetime.utcnow()
+
+    # Free room
+    if patient.room_id:
+        rm = db.session.get(Room, patient.room_id)
+        if rm:
+            rm.status = 'Available'
+
+    # Free ward bed
+    if patient.ward_id:
+        wd = db.session.get(Ward, patient.ward_id)
+        if wd:
+            wd.available_beds = min(wd.capacity, wd.available_beds + 1)
+            wd.occupied_beds = max(0, wd.occupied_beds - 1)
+
+    db.session.commit()
+    flash('Patient discharged successfully.', 'success')
+    return redirect(url_for('patient_summary', patient_id=patient.id))
+
+
+@app.route('/patients/<int:patient_id>/prescribe', methods=['POST'])
+@login_required
+def prescribe_medicine(patient_id):
+    patient = Patient.query.get_or_404(patient_id)
+    f = request.form
+    medicine_id = int(f.get('medicine_id'))
+    quantity = int(f.get('quantity', 1))
+    instructions = f.get('instructions', '')
+
+    med = db.session.get(Medicine, medicine_id)
+    if not med:
+        flash('Medicine not found.', 'danger')
+        return redirect(url_for('patient_summary', patient_id=patient.id))
+
+    if med.quantity < quantity:
+        flash(f'Insufficient stock for {med.name}. Only {med.quantity} available.', 'danger')
+        return redirect(url_for('patient_summary', patient_id=patient.id))
+
+    # Create prescription
+    prescription = Prescription(
+        patient_id=patient.id,
+        medicine_id=med.id,
+        quantity=quantity,
+        instructions=instructions
+    )
+    # Deduct stock
+    med.quantity -= quantity
+
+    db.session.add(prescription)
+    db.session.commit()
+
+    flash(f'Prescribed {quantity} of {med.name} successfully.', 'success')
+    return redirect(url_for('patient_summary', patient_id=patient.id))
 
 
 # ─── Doctors ─────────────────────────────────────────────────────────────────
@@ -925,6 +992,368 @@ def api_recent_appointments():
         'id': a.id, 'patient': a.patient.name, 'doctor': a.doctor.name,
         'date': str(a.date), 'time': a.time, 'status': a.status
     } for a in appts])
+
+
+@app.route('/api/patients/<int:patient_id>/prescriptions')
+@login_required
+def api_patient_prescriptions(patient_id):
+    patient = Patient.query.get_or_404(patient_id)
+    prescriptions = Prescription.query.filter_by(patient_id=patient_id).all()
+    return jsonify([{
+        'medicine_id': p.medicine_id,
+        'medicine_name': p.medicine.name,
+        'price': p.medicine.price,
+        'quantity': p.quantity
+    } for p in prescriptions])
+
+
+@app.route('/patients/<int:patient_id>/pdf')
+@login_required
+def patient_pdf(patient_id):
+    from io import BytesIO
+    from flask import send_file
+    from reportlab.lib.pagesizes import letter
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib import colors
+
+    patient = Patient.query.get_or_404(patient_id)
+    bills = Bill.query.filter_by(patient_id=patient_id).all()
+    total_charges = sum(b.subtotal for b in bills)
+    gst = total_charges * 0.05
+    grand_total = total_charges + gst
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
+    story = []
+    
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'DocTitle',
+        parent=styles['Heading1'],
+        fontName='Helvetica-Bold',
+        fontSize=24,
+        textColor=colors.HexColor('#0f172a'),
+        spaceAfter=6
+    )
+    subtitle_style = ParagraphStyle(
+        'DocSubtitle',
+        parent=styles['Normal'],
+        fontName='Helvetica',
+        fontSize=10,
+        textColor=colors.HexColor('#64748b'),
+        spaceAfter=15
+    )
+    h2_style = ParagraphStyle(
+        'SectionHeader',
+        parent=styles['Heading2'],
+        fontName='Helvetica-Bold',
+        fontSize=14,
+        textColor=colors.HexColor('#1e40af'),
+        spaceBefore=12,
+        spaceAfter=6,
+        keepWithNext=True
+    )
+    label_style = ParagraphStyle(
+        'GridLabel',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=9,
+        textColor=colors.HexColor('#334155')
+    )
+    value_style = ParagraphStyle(
+        'GridValue',
+        parent=styles['Normal'],
+        fontName='Helvetica',
+        fontSize=9,
+        textColor=colors.HexColor('#0f172a')
+    )
+    badge_style_admitted = ParagraphStyle(
+        'BadgeAdmitted',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=9,
+        textColor=colors.HexColor('#15803d')
+    )
+    badge_style_discharged = ParagraphStyle(
+        'BadgeDischarged',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=9,
+        textColor=colors.HexColor('#b91c1c')
+    )
+
+    # Title & Header
+    story.append(Paragraph("Hospital+ HMS", title_style))
+    story.append(Paragraph("Patient Summary Report | 123 Healthcare Blvd | +1 (555) 019-9000", subtitle_style))
+    
+    # Section 1: Personal Details
+    story.append(Paragraph("Personal Details", h2_style))
+    
+    status_style = badge_style_discharged if patient.status == 'Discharged' else badge_style_admitted
+    
+    personal_data = [
+        [
+            Paragraph("Patient ID:", label_style), Paragraph(f"#{patient.id}", value_style),
+            Paragraph("Full Name:", label_style), Paragraph(patient.name, value_style)
+        ],
+        [
+            Paragraph("Age:", label_style), Paragraph(str(patient.age), value_style),
+            Paragraph("Gender:", label_style), Paragraph(patient.gender, value_style)
+        ],
+        [
+            Paragraph("Blood Group:", label_style), Paragraph(patient.blood_group or "—", value_style),
+            Paragraph("Mobile:", label_style), Paragraph(patient.mobile, value_style)
+        ],
+        [
+            Paragraph("Email:", label_style), Paragraph(patient.email or "—", value_style),
+            Paragraph("Emergency Contact:", label_style), Paragraph(patient.emergency_contact or "—", value_style)
+        ],
+        [
+            Paragraph("Admission Date:", label_style), Paragraph(patient.admission_date.strftime('%d %b %Y, %H:%M') if patient.admission_date else "—", value_style),
+            Paragraph("Discharge Date:", label_style), Paragraph(patient.discharge_date.strftime('%d %b %Y, %H:%M') if patient.discharge_date else "—", value_style)
+        ],
+        [
+            Paragraph("Status:", label_style), Paragraph(patient.status, status_style),
+            Paragraph("Address:", label_style), Paragraph(patient.address or "—", value_style)
+        ]
+    ]
+    t1 = Table(personal_data, colWidths=[100, 170, 100, 170])
+    t1.setStyle(TableStyle([
+        ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+        ('TOPPADDING', (0,0), (-1,-1), 4),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#e2e8f0')),
+    ]))
+    story.append(t1)
+    story.append(Spacer(1, 10))
+
+    # Section 2: Treatment Information
+    story.append(Paragraph("Treatment Details", h2_style))
+    treatment_data = [
+        [Paragraph("Diagnosis / Disease:", label_style), Paragraph(patient.disease or "—", value_style)],
+        [Paragraph("Assigned Doctor:", label_style), Paragraph(f"{patient.doctor.name} ({patient.doctor.department})" if patient.doctor else "—", value_style)],
+        [Paragraph("Ward Allocated:", label_style), Paragraph(f"Ward {patient.ward.ward_number} ({patient.ward.ward_type})" if patient.ward else "—", value_style)],
+        [Paragraph("Room Allocated:", label_style), Paragraph(f"Room {patient.room.room_number} ({patient.room.room_type})" if patient.room else "—", value_style)]
+    ]
+    t2 = Table(treatment_data, colWidths=[150, 390])
+    t2.setStyle(TableStyle([
+        ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+        ('TOPPADDING', (0,0), (-1,-1), 4),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#e2e8f0')),
+    ]))
+    story.append(t2)
+    story.append(Spacer(1, 10))
+
+    # Section 3: Prescriptions
+    story.append(Paragraph("Prescribed Medicines", h2_style))
+    presc_headers = [Paragraph("Medicine", label_style), Paragraph("Quantity", label_style), Paragraph("Instructions", label_style), Paragraph("Date", label_style)]
+    presc_data = [presc_headers]
+    for p in patient.prescriptions:
+        presc_data.append([
+            Paragraph(p.medicine.name, value_style),
+            Paragraph(str(p.quantity), value_style),
+            Paragraph(p.instructions or "—", value_style),
+            Paragraph(p.created_at.strftime('%d %b %Y') if p.created_at else "—", value_style)
+        ])
+    if len(presc_data) == 1:
+        presc_data.append([Paragraph("No medicines prescribed.", value_style), "", "", ""])
+    t3 = Table(presc_data, colWidths=[160, 60, 220, 100])
+    t3.setStyle(TableStyle([
+        ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+        ('TOPPADDING', (0,0), (-1,-1), 4),
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#f8fafc')),
+        ('SPAN', (0,1), (3,1)) if len(presc_data) == 2 and presc_data[1][1] == "" else ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#e2e8f0')),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#e2e8f0')),
+    ]))
+    story.append(t3)
+    story.append(Spacer(1, 10))
+
+    # Section 4: Billing Summary
+    story.append(Paragraph("Billing & Invoices", h2_style))
+    bill_headers = [Paragraph("Bill No.", label_style), Paragraph("Type", label_style), Paragraph("Status", label_style), Paragraph("Total", label_style)]
+    bill_data = [bill_headers]
+    for b in bills:
+        bill_data.append([
+            Paragraph(b.bill_number, value_style),
+            Paragraph(b.bill_type, value_style),
+            Paragraph(b.payment_status, value_style),
+            Paragraph(f"INR {b.total:.2f}", value_style)
+        ])
+    
+    # Summary totals rows
+    bill_data.append([Paragraph("Subtotal", label_style), "", "", Paragraph(f"INR {total_charges:.2f}", label_style)])
+    bill_data.append([Paragraph("GST (5%)", label_style), "", "", Paragraph(f"INR {gst:.2f}", label_style)])
+    bill_data.append([Paragraph("Grand Total", label_style), "", "", Paragraph(f"INR {grand_total:.2f}", label_style)])
+    
+    t4 = Table(bill_data, colWidths=[150, 120, 120, 150])
+    t4_style = [
+        ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+        ('TOPPADDING', (0,0), (-1,-1), 4),
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#f8fafc')),
+        ('GRID', (0,0), (-1,-len(bills)-1), 0.5, colors.HexColor('#e2e8f0')),
+        ('SPAN', (0, -3), (2, -3)),
+        ('SPAN', (0, -2), (2, -2)),
+        ('SPAN', (0, -1), (2, -1)),
+        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#f0fdf4')),
+        ('GRID', (0, -3), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
+    ]
+    t4.setStyle(TableStyle(t4_style))
+    story.append(t4)
+
+    doc.build(story)
+    buffer.seek(0)
+    return send_file(
+        buffer,
+        as_attachment=True,
+        download_name=f"Patient_Summary_{patient.id}.pdf",
+        mimetype="application/pdf"
+    )
+
+
+@app.route('/bills/<int:bill_id>/pdf')
+@login_required
+def bill_pdf(bill_id):
+    from io import BytesIO
+    from flask import send_file
+    import json
+    from reportlab.lib.pagesizes import letter
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib import colors
+
+    bill = Bill.query.get_or_404(bill_id)
+    items = json.loads(bill.items_json) if bill.items_json else []
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
+    story = []
+    
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'DocTitle',
+        parent=styles['Heading1'],
+        fontName='Helvetica-Bold',
+        fontSize=24,
+        textColor=colors.HexColor('#1e3a8a'),
+        spaceAfter=6
+    )
+    subtitle_style = ParagraphStyle(
+        'DocSubtitle',
+        parent=styles['Normal'],
+        fontName='Helvetica',
+        fontSize=10,
+        textColor=colors.HexColor('#64748b'),
+        spaceAfter=15
+    )
+    h2_style = ParagraphStyle(
+        'InvoiceHeader',
+        parent=styles['Heading2'],
+        fontName='Helvetica-Bold',
+        fontSize=16,
+        textColor=colors.HexColor('#0f172a'),
+        spaceBefore=10,
+        spaceAfter=10
+    )
+    label_style = ParagraphStyle(
+        'GridLabel',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=10,
+        textColor=colors.HexColor('#334155')
+    )
+    value_style = ParagraphStyle(
+        'GridValue',
+        parent=styles['Normal'],
+        fontName='Helvetica',
+        fontSize=10,
+        textColor=colors.HexColor('#0f172a')
+    )
+
+    story.append(Paragraph("Hospital+ HMS", title_style))
+    story.append(Paragraph("In-patient Billing Department | Invoice Generation", subtitle_style))
+    
+    story.append(Paragraph(f"INVOICE {bill.bill_number}", h2_style))
+    
+    info_data = [
+        [
+            Paragraph("Bill Number:", label_style), Paragraph(bill.bill_number, value_style),
+            Paragraph("Date Issued:", label_style), Paragraph(bill.created_at.strftime('%d %b %Y') if bill.created_at else "—", value_style)
+        ],
+        [
+            Paragraph("Patient Name:", label_style), Paragraph(bill.patient.name, value_style),
+            Paragraph("Mobile:", label_style), Paragraph(bill.patient.mobile, value_style)
+        ],
+        [
+            Paragraph("Bill Type:", label_style), Paragraph(bill.bill_type, value_style),
+            Paragraph("Payment Status:", label_style), Paragraph(bill.payment_status, label_style)
+        ]
+    ]
+    t_info = Table(info_data, colWidths=[100, 170, 100, 170])
+    t_info.setStyle(TableStyle([
+        ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+        ('TOPPADDING', (0,0), (-1,-1), 4),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cbd5e1')),
+    ]))
+    story.append(t_info)
+    story.append(Spacer(1, 15))
+    
+    # Items table
+    item_headers = [Paragraph("#", label_style), Paragraph("Description", label_style), Paragraph("Amount", label_style)]
+    item_data = [item_headers]
+    for idx, item in enumerate(items):
+        item_data.append([
+            Paragraph(str(idx + 1), value_style),
+            Paragraph(item.get('description', ''), value_style),
+            Paragraph(f"INR {item.get('amount', 0.0):.2f}", value_style)
+        ])
+    
+    # Summary totals rows
+    item_data.append(["", Paragraph("Subtotal", label_style), Paragraph(f"INR {bill.subtotal:.2f}", label_style)])
+    item_data.append(["", Paragraph("GST (5%)", label_style), Paragraph(f"INR {bill.gst:.2f}", label_style)])
+    if bill.discount:
+        item_data.append(["", Paragraph("Discount", label_style), Paragraph(f"-INR {bill.discount:.2f}", label_style)])
+    item_data.append(["", Paragraph("Grand Total", label_style), Paragraph(f"INR {bill.total:.2f}", label_style)])
+    
+    t_items = Table(item_data, colWidths=[40, 350, 150])
+    t_items_style = [
+        ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+        ('ALIGN', (2,0), (2,-1), 'RIGHT'),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+        ('TOPPADDING', (0,0), (-1,-1), 4),
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#f8fafc')),
+        ('GRID', (0,0), (-1,-len(items)-1), 0.5, colors.HexColor('#e2e8f0')),
+        ('SPAN', (0, -4), (1, -4)) if not bill.discount else ('SPAN', (0, -5), (1, -5)),
+        ('SPAN', (0, -3), (1, -3)),
+        ('SPAN', (0, -2), (1, -2)),
+        ('SPAN', (0, -1), (1, -1)),
+        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#f0fdf4')),
+        ('GRID', (0, -4 if not bill.discount else -5), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
+    ]
+    t_items.setStyle(TableStyle(t_items_style))
+    story.append(t_items)
+    
+    story.append(Spacer(1, 20))
+    story.append(Paragraph("Thank you for choosing Hospital+ HMS. Wishing you a speedy recovery!", subtitle_style))
+    
+    doc.build(story)
+    buffer.seek(0)
+    return send_file(
+        buffer,
+        as_attachment=True,
+        download_name=f"Invoice_{bill.bill_number}.pdf",
+        mimetype="application/pdf"
+    )
 
 
 # ─── Seed Data ────────────────────────────────────────────────────────────────

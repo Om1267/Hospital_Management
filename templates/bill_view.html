@@ -6,6 +6,7 @@
     <h1 class="h4 mb-0"><i class="bi bi-receipt text-primary me-2"></i>Bill {{ bill.bill_number }}</h1>
     <div class="d-flex gap-2">
         <a href="{{ url_for('print_bill', bill_id=bill.id) }}" class="btn btn-outline-secondary btn-sm" target="_blank"><i class="bi bi-printer me-1"></i>Print</a>
+        <a href="{{ url_for('bill_pdf', bill_id=bill.id) }}" class="btn btn-danger btn-sm" target="_blank"><i class="bi bi-file-earmark-pdf me-1"></i>Download PDF</a>
         <a href="{{ url_for('bills') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>Back</a>
     </div>
 </div>

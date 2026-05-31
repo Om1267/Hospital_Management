@@ -80,16 +80,58 @@
 <script>
 // Dynamic medicine lines
 const template = document.querySelector('.medicine-line').outerHTML;
+const container = document.getElementById('medicineLines');
+
 document.getElementById('addMedLine').addEventListener('click', () => {
     const div = document.createElement('div');
     div.innerHTML = template;
-    document.getElementById('medicineLines').appendChild(div.firstChild);
+    container.appendChild(div.firstChild);
 });
-document.getElementById('medicineLines').addEventListener('click', (e) => {
+
+container.addEventListener('click', (e) => {
     if (e.target.classList.contains('remove-line')) {
         const lines = document.querySelectorAll('.medicine-line');
-        if (lines.length > 1) e.target.closest('.medicine-line').remove();
+        if (lines.length > 1) {
+            e.target.closest('.medicine-line').remove();
+        } else {
+            // Reset the single line
+            const line = lines[0];
+            line.querySelector('select').value = '';
+            line.querySelector('input').value = '1';
+        }
     }
+});
+
+// Auto-fill medicines from active prescriptions
+document.querySelector('select[name="patient_id"]').addEventListener('change', function() {
+    const patientId = this.value;
+    if (!patientId) return;
+
+    fetch('/api/patients/' + patientId + '/prescriptions')
+        .then(response => response.json())
+        .then(data => {
+            if (data && data.length > 0) {
+                // Clear the container
+                container.innerHTML = '';
+                
+                // Add a line for each prescription
+                data.forEach(p => {
+                    const div = document.createElement('div');
+                    div.innerHTML = template;
+                    const line = div.firstChild;
+                    
+                    // Set select option and quantity
+                    const select = line.querySelector('select');
+                    select.value = p.medicine_id;
+                    
+                    const qtyInp = line.querySelector('input');
+                    qtyInp.value = p.quantity;
+                    
+                    container.appendChild(line);
+                });
+            }
+        })
+        .catch(err => console.error('Error fetching prescriptions:', err));
 });
 </script>
 {% endblock %}

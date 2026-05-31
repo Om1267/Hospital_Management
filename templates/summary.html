@@ -5,8 +5,14 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1 class="h4 mb-0"><i class="bi bi-person-vcard text-primary me-2"></i>{{ patient.name }}</h1>
     <div class="d-flex gap-2">
-        <a href="{{ url_for('print_bill', bill_id=bills[0].id) if bills else '#' }}" class="btn btn-outline-success btn-sm" {{ 'target=_blank' if bills }}>
-            <i class="bi bi-file-earmark-pdf me-1"></i>Print Summary
+        {% if patient.status != 'Discharged' %}
+        <form method="POST" action="{{ url_for('discharge_patient', patient_id=patient.id) }}" data-confirm="Discharge patient {{ patient.name }}?">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-warning btn-sm"><i class="bi bi-box-arrow-right me-1"></i>Discharge Patient</button>
+        </form>
+        {% endif %}
+        <a href="{{ url_for('patient_pdf', patient_id=patient.id) }}" class="btn btn-outline-success btn-sm" target="_blank">
+            <i class="bi bi-file-earmark-pdf me-1"></i>Download PDF
         </a>
         <a href="{{ url_for('patients') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>Back</a>
     </div>
@@ -51,6 +57,79 @@
                 </p>
                 <p><strong>Ward:</strong> {{ patient.ward.ward_number + ' (' + patient.ward.ward_type + ')' if patient.ward else '—' }}</p>
                 <p><strong>Room:</strong> {{ patient.room.room_number + ' (' + patient.room.room_type + ')' if patient.room else '—' }}</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Prescriptions & Medicines -->
+    <div class="col-lg-12">
+        <div class="card">
+            <div class="card-header fw-semibold" style="background:linear-gradient(90deg,#764ba2,#667eea);color:#fff;">
+                <i class="bi bi-capsule-pill me-2"></i>Prescribed Medicines & Prescriptions
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-7">
+                        <h6 class="fw-semibold mb-2">Active Prescriptions</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Medicine</th>
+                                        <th>Quantity</th>
+                                        <th>Instructions</th>
+                                        <th>Date</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for p in patient.prescriptions %}
+                                    <tr>
+                                        <td class="fw-semibold">{{ p.medicine.name }}</td>
+                                        <td><span class="badge bg-secondary">{{ p.quantity }}</span></td>
+                                        <td class="text-muted small">{{ p.instructions or '—' }}</td>
+                                        <td class="small text-muted">{{ p.created_at.strftime('%d %b %Y') }}</td>
+                                    </tr>
+                                    {% else %}
+                                    <tr>
+                                        <td colspan="4" class="text-center text-muted py-3">No medicines prescribed yet.</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-5 border-start">
+                        <h6 class="fw-semibold mb-2">Prescribe New Medicine</h6>
+                        {% if patient.status != 'Discharged' %}
+                        <form method="POST" action="{{ url_for('prescribe_medicine', patient_id=patient.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <div class="mb-2">
+                                <label class="form-label small fw-medium">Select Medicine *</label>
+                                <select name="medicine_id" class="form-select form-select-sm" required>
+                                    <option value="">— Select Medicine —</option>
+                                    {% for m in medicines %}
+                                    <option value="{{ m.id }}">{{ m.name }} (Available: {{ m.quantity }})</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small fw-medium">Quantity *</label>
+                                <input type="number" name="quantity" class="form-control form-control-sm" min="1" value="1" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small fw-medium">Dosage & Instructions</label>
+                                <input type="text" name="instructions" class="form-control form-control-sm" placeholder="e.g. 1-0-1 after food">
+                            </div>
+                            <button type="submit" class="btn btn-sm btn-primary w-100">
+                                <i class="bi bi-plus-lg me-1"></i>Prescribe
+                            </button>
+                        </form>
+                        {% else %}
+                        <p class="text-muted small py-3"><i class="bi bi-info-circle me-1"></i>Cannot prescribe medicines to a discharged patient.</p>
+                        {% endif %}
+                    </div>
+                </div>
             </div>
         </div>
     </div>

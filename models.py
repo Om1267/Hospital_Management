@@ -202,3 +202,22 @@ class Bill(db.Model):
 
     def __repr__(self):
         return f'<Bill {self.bill_number}>'
+
+
+# ── Prescriptions ─────────────────────────────────────────────────────────────
+class Prescription(db.Model):
+    __tablename__ = 'prescriptions'
+
+    id = db.Column(db.Integer, primary_key=True)
+    patient_id = db.Column(db.Integer, db.ForeignKey('patients.id'), nullable=False)
+    medicine_id = db.Column(db.Integer, db.ForeignKey('medicines.id'), nullable=False)
+    quantity = db.Column(db.Integer, nullable=False, default=1)
+    instructions = db.Column(db.String(200))  # e.g., "1-0-1 after food"
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relationships
+    patient = db.relationship('Patient', backref=db.backref('prescriptions', lazy=True, cascade="all, delete-orphan"))
+    medicine = db.relationship('Medicine', backref=db.backref('prescriptions', lazy=True))
+
+    def __repr__(self):
+        return f'<Prescription {self.id}: Medicine {self.medicine_id} for Patient {self.patient_id}>'
