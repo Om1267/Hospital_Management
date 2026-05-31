@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+{% block title %}{{ action }} Nurse{% endblock %}
+{% block page_title %}{{ action }} Nurse{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h4 mb-0"><i class="bi bi-person-lines-fill text-primary me-2"></i>{{ action }} Nurse</h1>
+    <a href="{{ url_for('nurses') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>Back</a>
+</div>
+<div class="card"><div class="card-body">
+    <form method="POST" novalidate>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label class="form-label fw-medium">Full Name *</label>
+                <input type="text" name="name" class="form-control" required value="{{ nurse.name if nurse else '' }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label fw-medium">Shift *</label>
+                <select name="shift" class="form-select" required>
+                    {% for s in ['Morning','Afternoon','Night'] %}
+                    <option value="{{ s }}" {{ 'selected' if nurse and nurse.shift == s }}>{{ s }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label fw-medium">Assign Ward</label>
+                <select name="ward_id" class="form-select">
+                    <option value="">— None —</option>
+                    {% for w in wards %}
+                    <option value="{{ w.id }}" {{ 'selected' if nurse and nurse.ward_id == w.id }}>{{ w.ward_number }} – {{ w.ward_type }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-5">
+                <label class="form-label fw-medium">Contact *</label>
+                <input type="text" name="contact" class="form-control" required value="{{ nurse.contact if nurse else '' }}">
+            </div>
+            <div class="col-md-5">
+                <label class="form-label fw-medium">Email</label>
+                <input type="email" name="email" class="form-control" value="{{ nurse.email if nurse else '' }}">
+            </div>
+            <div class="col-12 mt-2">
+                <button type="submit" class="btn btn-primary px-4"><i class="bi bi-check-lg me-1"></i>{{ action }}</button>
+                <a href="{{ url_for('nurses') }}" class="btn btn-outline-secondary ms-2">Cancel</a>
+            </div>
+        </div>
+    </form>
+</div></div>
+{% endblock %}

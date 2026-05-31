@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+{% block title %}{{ action }} Ward{% endblock %}
+{% block page_title %}{{ action }} Ward{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h4 mb-0"><i class="bi bi-building text-primary me-2"></i>{{ action }} Ward</h1>
+    <a href="{{ url_for('wards') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>Back</a>
+</div>
+<div class="card"><div class="card-body">
+    <form method="POST" novalidate>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label fw-medium">Ward Number *</label>
+                <input type="text" name="ward_number" class="form-control" required value="{{ ward.ward_number if ward else '' }}" placeholder="e.g. W01">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label fw-medium">Ward Type *</label>
+                <select name="ward_type" class="form-select" required>
+                    {% for t in ['General','ICU','Pediatric','Surgical','Maternity','Oncology'] %}
+                    <option value="{{ t }}" {{ 'selected' if ward and ward.ward_type == t }}>{{ t }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label fw-medium">Capacity *</label>
+                <input type="number" name="capacity" class="form-control" required min="1" value="{{ ward.capacity if ward else 10 }}">
+            </div>
+            <div class="col-12 mt-2">
+                <button type="submit" class="btn btn-primary px-4"><i class="bi bi-check-lg me-1"></i>{{ action }}</button>
+                <a href="{{ url_for('wards') }}" class="btn btn-outline-secondary ms-2">Cancel</a>
+            </div>
+        </div>
+    </form>
+</div></div>
+{% endblock %}

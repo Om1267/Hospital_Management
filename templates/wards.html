@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+{% block title %}Wards{% endblock %}
+{% block page_title %}Wards{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h4 mb-0"><i class="bi bi-building text-primary me-2"></i>Ward Management</h1>
+    {% if current_user.role == 'admin' %}
+    <a href="{{ url_for('add_ward') }}" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Add Ward</a>
+    {% endif %}
+</div>
+<div class="row g-3">
+    {% for w in wards %}
+    <div class="col-md-6 col-xl-4">
+        <div class="card h-100 border-{{ 'success' if w.available_beds > 0 else 'danger' }}" style="border-width:2px!important;">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                    <div>
+                        <h5 class="card-title mb-0">Ward {{ w.ward_number }}</h5>
+                        <span class="badge bg-info-subtle text-info">{{ w.ward_type }}</span>
+                    </div>
+                    <span class="badge {{ 'bg-success' if w.available_beds > 0 else 'bg-danger' }} fs-6">
+                        {{ w.available_beds }} free
+                    </span>
+                </div>
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between small text-muted mb-1">
+                        <span>Occupancy</span>
+                        <span>{{ w.occupied_beds }}/{{ w.capacity }}</span>
+                    </div>
+                    <div class="progress" style="height:8px;">
+                        <div class="progress-bar {{ 'bg-success' if w.available_beds > 3 else 'bg-warning' if w.available_beds > 0 else 'bg-danger' }}"
+                             style="width:{{ (w.occupied_beds / w.capacity * 100) if w.capacity else 0 }}%;"></div>
+                    </div>
+                </div>
+                <ul class="list-unstyled small text-muted mb-3">
+                    <li><i class="bi bi-people me-2"></i>Patients: {{ w.patients|length }}</li>
+                    <li><i class="bi bi-person-lines-fill me-2"></i>Nurses: {{ w.nurses|length }}</li>
+                </ul>
+                <div class="d-flex gap-2">
+                    <a href="{{ url_for('ward_detail', ward_id=w.id) }}" class="btn btn-sm btn-outline-info flex-fill">
+                        <i class="bi bi-eye me-1"></i>View
+                    </a>
+                    {% if current_user.role == 'admin' %}
+                    <a href="{{ url_for('edit_ward', ward_id=w.id) }}" class="btn btn-sm btn-outline-primary flex-fill">
+                        <i class="bi bi-pencil me-1"></i>Edit
+                    </a>
+                    <form method="POST" action="{{ url_for('delete_ward', ward_id=w.id) }}" data-confirm="Delete Ward {{ w.ward_number }}?">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="col-12 text-center py-5 text-muted">
+        <i class="bi bi-building-x display-4 d-block mb-2"></i>No wards configured.
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

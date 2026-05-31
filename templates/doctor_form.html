@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+{% block title %}{{ action }} Doctor{% endblock %}
+{% block page_title %}{{ action }} Doctor{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h4 mb-0"><i class="bi bi-person-badge-fill text-primary me-2"></i>{{ action }} Doctor</h1>
+    <a href="{{ url_for('doctors') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>Back</a>
+</div>
+<div class="card">
+    <div class="card-body">
+        <form method="POST" novalidate>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label fw-medium">Full Name *</label>
+                    <input type="text" name="name" class="form-control" required value="{{ doctor.name if doctor else '' }}">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-medium">Department *</label>
+                    <select name="department" class="form-select" required>
+                        {% for dept in ['Cardiology','Neurology','Orthopedics','Pediatrics','General Medicine','Gynecology','Oncology','Radiology','Surgery','Dermatology'] %}
+                        <option value="{{ dept }}" {{ 'selected' if doctor and doctor.department == dept }}>{{ dept }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-medium">Qualification *</label>
+                    <input type="text" name="qualification" class="form-control" required value="{{ doctor.qualification if doctor else '' }}" placeholder="e.g. MBBS, MD">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-medium">Experience (yrs)</label>
+                    <input type="number" name="experience" class="form-control" min="0" value="{{ doctor.experience if doctor else 0 }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-medium">Availability</label>
+                    <select name="availability" class="form-select">
+                        {% for av in ['Available','On Leave','Busy'] %}
+                        <option value="{{ av }}" {{ 'selected' if doctor and doctor.availability == av }}>{{ av }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-medium">Contact *</label>
+                    <input type="text" name="contact" class="form-control" required value="{{ doctor.contact if doctor else '' }}">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-medium">Email</label>
+                    <input type="email" name="email" class="form-control" value="{{ doctor.email if doctor else '' }}">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-medium">Salary (₹)</label>
+                    <input type="number" name="salary" class="form-control" min="0" value="{{ doctor.salary if doctor else 0 }}">
+                </div>
+                <div class="col-12 mt-2">
+                    <button type="submit" class="btn btn-primary px-4"><i class="bi bi-check-lg me-1"></i>{{ action }}</button>
+                    <a href="{{ url_for('doctors') }}" class="btn btn-outline-secondary ms-2">Cancel</a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,113 @@
+{% extends 'base.html' %}
+{% block title %}Summary – {{ patient.name }}{% endblock %}
+{% block page_title %}Patient Summary{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h4 mb-0"><i class="bi bi-person-vcard text-primary me-2"></i>{{ patient.name }}</h1>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('print_bill', bill_id=bills[0].id) if bills else '#' }}" class="btn btn-outline-success btn-sm" {{ 'target=_blank' if bills }}>
+            <i class="bi bi-file-earmark-pdf me-1"></i>Print Summary
+        </a>
+        <a href="{{ url_for('patients') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>Back</a>
+    </div>
+</div>
+
+<div class="row g-3">
+    <!-- Personal Details -->
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header fw-semibold" style="background:linear-gradient(90deg,#667eea,#764ba2);color:#fff;">
+                <i class="bi bi-person-badge-fill me-2"></i>Personal Details
+            </div>
+            <div class="card-body">
+                <div class="row g-2 small">
+                    <div class="col-6"><strong>Age:</strong> {{ patient.age }}</div>
+                    <div class="col-6"><strong>Gender:</strong> {{ patient.gender }}</div>
+                    <div class="col-6"><strong>Blood Group:</strong> <span class="badge bg-danger">{{ patient.blood_group or '—' }}</span></div>
+                    <div class="col-6"><strong>Mobile:</strong> {{ patient.mobile }}</div>
+                    <div class="col-6"><strong>Email:</strong> {{ patient.email or '—' }}</div>
+                    <div class="col-6"><strong>Emergency:</strong> {{ patient.emergency_contact or '—' }}</div>
+                    <div class="col-12"><strong>Address:</strong> {{ patient.address or '—' }}</div>
+                    <div class="col-6"><strong>Admitted:</strong> {{ patient.admission_date.strftime('%d %b %Y') }}</div>
+                    <div class="col-6"><strong>Discharged:</strong> {{ patient.discharge_date.strftime('%d %b %Y') if patient.discharge_date else '—' }}</div>
+                    <div class="col-12"><strong>Status:</strong> <span class="badge status-{{ patient.status.lower().replace(' ','') }}">{{ patient.status }}</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Assigned Staff & Location -->
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header fw-semibold" style="background:linear-gradient(90deg,#11998e,#38ef7d);color:#fff;">
+                <i class="bi bi-hospital-fill me-2"></i>Treatment Details
+            </div>
+            <div class="card-body">
+                <p><strong>Disease / Diagnosis:</strong><br>{{ patient.disease or '—' }}</p>
+                <p><strong>Assigned Doctor:</strong><br>
+                    {% if patient.doctor %}
+                    {{ patient.doctor.name }} – {{ patient.doctor.department }}
+                    {% else %}—{% endif %}
+                </p>
+                <p><strong>Ward:</strong> {{ patient.ward.ward_number + ' (' + patient.ward.ward_type + ')' if patient.ward else '—' }}</p>
+                <p><strong>Room:</strong> {{ patient.room.room_number + ' (' + patient.room.room_type + ')' if patient.room else '—' }}</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Appointments -->
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header fw-semibold"><i class="bi bi-calendar-check me-2 text-primary"></i>Appointments</div>
+            <div class="card-body p-0">
+                <table class="table table-sm mb-0">
+                    <thead class="table-light"><tr><th>Date</th><th>Time</th><th>Doctor</th><th>Status</th></tr></thead>
+                    <tbody>
+                        {% for a in patient.appointments %}
+                        <tr>
+                            <td>{{ a.date.strftime('%d %b %Y') }}</td>
+                            <td>{{ a.time }}</td>
+                            <td>{{ a.doctor.name }}</td>
+                            <td><span class="badge status-{{ a.status.lower() }}">{{ a.status }}</span></td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="4" class="text-center text-muted py-2">No appointments.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Billing Summary -->
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header fw-semibold" style="background:linear-gradient(90deg,#f7971e,#ffd200);color:#fff;">
+                <i class="bi bi-receipt-cutoff me-2"></i>Billing Summary
+            </div>
+            <div class="card-body">
+                <table class="table table-sm mb-3">
+                    <thead class="table-light"><tr><th>Bill No.</th><th>Type</th><th>Total</th><th>Status</th></tr></thead>
+                    <tbody>
+                        {% for b in bills %}
+                        <tr>
+                            <td>{{ b.bill_number }}</td>
+                            <td>{{ b.bill_type }}</td>
+                            <td>₹{{ '%.2f'|format(b.total) }}</td>
+                            <td><span class="badge {{ 'bg-success' if b.payment_status=='Paid' else 'bg-warning text-dark' }}">{{ b.payment_status }}</span></td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="4" class="text-center text-muted py-2">No bills.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                <div class="border-top pt-3">
+                    <div class="d-flex justify-content-between"><span>Subtotal:</span><strong>₹{{ '%.2f'|format(total_charges) }}</strong></div>
+                    <div class="d-flex justify-content-between"><span>GST (5%):</span><strong>₹{{ '%.2f'|format(gst) }}</strong></div>
+                    <div class="d-flex justify-content-between fs-5 mt-2 text-success"><strong>Grand Total:</strong><strong>₹{{ '%.2f'|format(grand_total) }}</strong></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

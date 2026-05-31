@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+{% block title %}{{ action }} Medicine{% endblock %}
+{% block page_title %}{{ action }} Medicine{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h4 mb-0"><i class="bi bi-capsule-pill text-primary me-2"></i>{{ action }} Medicine</h1>
+    <a href="{{ url_for('medicines') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>Back</a>
+</div>
+<div class="card"><div class="card-body">
+    <form method="POST" novalidate>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="row g-3">
+            <div class="col-md-5">
+                <label class="form-label fw-medium">Medicine Name *</label>
+                <input type="text" name="name" class="form-control" required value="{{ med.name if med else '' }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label fw-medium">Category</label>
+                <input type="text" name="category" class="form-control" value="{{ med.category if med else '' }}" placeholder="e.g. Antibiotic">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label fw-medium">Batch Number *</label>
+                <input type="text" name="batch_number" class="form-control" required value="{{ med.batch_number if med else '' }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label fw-medium">Quantity *</label>
+                <input type="number" name="quantity" class="form-control" required min="0" value="{{ med.quantity if med else 0 }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label fw-medium">Price (₹) *</label>
+                <input type="number" name="price" class="form-control" required min="0" step="0.01" value="{{ med.price if med else 0 }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label fw-medium">Expiry Date *</label>
+                <input type="date" name="expiry_date" class="form-control" required value="{{ med.expiry_date.isoformat() if med else '' }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label fw-medium">Manufacturer</label>
+                <input type="text" name="manufacturer" class="form-control" value="{{ med.manufacturer if med else '' }}">
+            </div>
+            <div class="col-12 mt-2">
+                <button type="submit" class="btn btn-primary px-4"><i class="bi bi-check-lg me-1"></i>{{ action }}</button>
+                <a href="{{ url_for('medicines') }}" class="btn btn-outline-secondary ms-2">Cancel</a>
+            </div>
+        </div>
+    </form>
+</div></div>
+{% endblock %}

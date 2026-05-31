@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+{% block title %}Bill {{ bill.bill_number }}{% endblock %}
+{% block page_title %}Bill Details{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h4 mb-0"><i class="bi bi-receipt text-primary me-2"></i>Bill {{ bill.bill_number }}</h1>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('print_bill', bill_id=bill.id) }}" class="btn btn-outline-secondary btn-sm" target="_blank"><i class="bi bi-printer me-1"></i>Print</a>
+        <a href="{{ url_for('bills') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>Back</a>
+    </div>
+</div>
+<div class="row g-3">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header fw-semibold">Line Items</div>
+            <div class="card-body p-0">
+                <table class="table mb-0">
+                    <thead class="table-light"><tr><th>Description</th><th class="text-end">Amount (₹)</th></tr></thead>
+                    <tbody>
+                        {% for item in items %}
+                        <tr><td>{{ item.description }}</td><td class="text-end">{{ '%.2f'|format(item.amount) }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr class="table-light"><td class="fw-medium">Subtotal</td><td class="text-end">₹{{ '%.2f'|format(bill.subtotal) }}</td></tr>
+                        <tr><td class="fw-medium">GST (5%)</td><td class="text-end">₹{{ '%.2f'|format(bill.gst) }}</td></tr>
+                        {% if bill.discount %}<tr><td class="fw-medium text-success">Discount</td><td class="text-end text-success">-₹{{ '%.2f'|format(bill.discount) }}</td></tr>{% endif %}
+                        <tr class="table-success"><td class="fw-bold fs-5">TOTAL</td><td class="text-end fw-bold fs-5">₹{{ '%.2f'|format(bill.total) }}</td></tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header fw-semibold">Bill Info</div>
+            <div class="card-body">
+                <ul class="list-unstyled">
+                    <li class="mb-2"><strong>Bill No:</strong> {{ bill.bill_number }}</li>
+                    <li class="mb-2"><strong>Patient:</strong> {{ bill.patient.name }}</li>
+                    <li class="mb-2"><strong>Type:</strong> {{ bill.bill_type }}</li>
+                    <li class="mb-2"><strong>Date:</strong> {{ bill.created_at.strftime('%d %b %Y, %H:%M') }}</li>
+                    <li class="mb-3"><strong>Status:</strong>
+                        <span class="badge {{ 'bg-success' if bill.payment_status=='Paid' else 'bg-warning text-dark' }}">{{ bill.payment_status }}</span>
+                    </li>
+                </ul>
+                {% if bill.payment_status == 'Pending' and current_user.role in ['admin','receptionist'] %}
+                <form method="POST" action="{{ url_for('mark_bill_paid', bill_id=bill.id) }}" data-confirm="Mark bill as paid?">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-success w-100"><i class="bi bi-check-circle me-1"></i>Mark as Paid</button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

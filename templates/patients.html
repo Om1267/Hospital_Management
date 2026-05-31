@@ -1,0 +1,112 @@
+{% extends 'base.html' %}
+{% block title %}Patients{% endblock %}
+{% block page_title %}Patients{% endblock %}
+{% block content %}
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+    <h1 class="h4 mb-0"><i class="bi bi-people-fill text-primary me-2"></i>Patient Management</h1>
+    <a href="{{ url_for('add_patient') }}" class="btn btn-primary">
+        <i class="bi bi-plus-lg me-1"></i>Admit Patient
+    </a>
+</div>
+
+<!-- Search -->
+<form method="GET" class="mb-4">
+    <div class="input-group" style="max-width:450px;">
+        <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
+        <input type="text" name="q" class="form-control border-start-0" placeholder="Search by name, disease, mobile…" value="{{ search }}">
+        <button class="btn btn-primary" type="submit">Search</button>
+        {% if search %}
+        <a href="{{ url_for('patients') }}" class="btn btn-outline-secondary">Clear</a>
+        {% endif %}
+    </div>
+</form>
+
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Age/Gender</th>
+                        <th>Blood</th>
+                        <th>Disease</th>
+                        <th>Doctor</th>
+                        <th>Ward/Room</th>
+                        <th>Status</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in patients.items %}
+                    <tr>
+                        <td class="text-muted small">#{{ p.id }}</td>
+                        <td>
+                            <div class="fw-semibold">{{ p.name }}</div>
+                            <div class="text-muted small">{{ p.mobile }}</div>
+                        </td>
+                        <td>{{ p.age }} / {{ p.gender[0] }}</td>
+                        <td><span class="badge bg-danger-subtle text-danger">{{ p.blood_group or '—' }}</span></td>
+                        <td>{{ p.disease or '—' }}</td>
+                        <td>{{ p.doctor.name if p.doctor else '—' }}</td>
+                        <td>
+                            {% if p.ward %}W{{ p.ward.ward_number }}{% endif %}
+                            {% if p.room %} / R{{ p.room.room_number }}{% endif %}
+                            {% if not p.ward and not p.room %}—{% endif %}
+                        </td>
+                        <td><span class="badge status-{{ p.status.lower().replace(' ','') }}">{{ p.status }}</span></td>
+                        <td class="text-end">
+                            <a href="{{ url_for('patient_summary', patient_id=p.id) }}" class="btn btn-sm btn-outline-info" title="Summary">
+                                <i class="bi bi-eye"></i>
+                            </a>
+                            <a href="{{ url_for('edit_patient', patient_id=p.id) }}" class="btn btn-sm btn-outline-primary" title="Edit">
+                                <i class="bi bi-pencil"></i>
+                            </a>
+                            <form method="POST" action="{{ url_for('delete_patient', patient_id=p.id) }}"
+                                  class="d-inline" data-confirm="Delete patient {{ p.name }}? This cannot be undone.">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button class="btn btn-sm btn-outline-danger" title="Delete">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="9" class="text-center text-muted py-4">
+                            <i class="bi bi-person-x display-6 d-block mb-2"></i>
+                            No patients found{% if search %} for "{{ search }}"{% endif %}.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Pagination -->
+{% if patients.pages > 1 %}
+<nav class="mt-3">
+    <ul class="pagination justify-content-center">
+        <li class="page-item {{ 'disabled' if not patients.has_prev }}">
+            <a class="page-link" href="{{ url_for('patients', page=patients.prev_num, q=search) }}">‹ Prev</a>
+        </li>
+        {% for p in patients.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+            {% if p %}
+            <li class="page-item {{ 'active' if p == patients.page }}">
+                <a class="page-link" href="{{ url_for('patients', page=p, q=search) }}">{{ p }}</a>
+            </li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link">…</span></li>
+            {% endif %}
+        {% endfor %}
+        <li class="page-item {{ 'disabled' if not patients.has_next }}">
+            <a class="page-link" href="{{ url_for('patients', page=patients.next_num, q=search) }}">Next ›</a>
+        </li>
+    </ul>
+</nav>
+{% endif %}
+{% endblock %}

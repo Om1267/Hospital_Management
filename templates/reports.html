@@ -1,0 +1,116 @@
+{% extends 'base.html' %}
+{% block title %}Reports{% endblock %}
+{% block page_title %}Reports{% endblock %}
+{% block content %}
+<h1 class="h4 mb-4"><i class="bi bi-bar-chart-fill text-primary me-2"></i>Reports</h1>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="GET" class="row g-3 align-items-end">
+            <div class="col-md-4">
+                <label class="form-label fw-medium">Report Type</label>
+                <select name="type" class="form-select" id="reportType">
+                    <option value="">— Select Report —</option>
+                    {% for t in [('daily','Daily Report'),('monthly','Monthly Report'),('revenue','Revenue Report'),('medicine','Medicine Stock'),('patient','Patient Report')] %}
+                    <option value="{{ t[0] }}" {{ 'selected' if report_type == t[0] }}>{{ t[1] }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-primary"><i class="bi bi-file-earmark-bar-graph me-1"></i>Generate</button>
+            </div>
+            {% if report_type %}
+            <div class="col-auto">
+                <a href="{{ url_for('download_report', fmt='excel', type=report_type) }}" class="btn btn-outline-success">
+                    <i class="bi bi-file-earmark-excel me-1"></i>Export Excel
+                </a>
+            </div>
+            {% endif %}
+        </form>
+    </div>
+</div>
+
+{% if report %}
+<div class="card">
+    <div class="card-header fw-semibold bg-white border-0 pt-3">
+        <i class="bi bi-file-text text-primary me-2"></i>{{ report.title }}
+    </div>
+    <div class="card-body">
+        {% if report_type in ['daily','monthly','patient'] %}
+        <div class="mb-3">
+            <span class="badge bg-primary me-2">Total Patients: {{ report.patients|length }}</span>
+            {% if report.revenue is defined %}
+            <span class="badge bg-success">Revenue: ₹{{ '%.2f'|format(report.revenue) }}</span>
+            {% endif %}
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover table-sm">
+                <thead class="table-light">
+                    <tr><th>ID</th><th>Name</th><th>Age</th><th>Gender</th><th>Disease</th><th>Doctor</th><th>Status</th><th>Admitted</th></tr>
+                </thead>
+                <tbody>
+                    {% for p in report.patients %}
+                    <tr>
+                        <td>{{ p.id }}</td>
+                        <td><a href="{{ url_for('patient_summary', patient_id=p.id) }}">{{ p.name }}</a></td>
+                        <td>{{ p.age }}</td>
+                        <td>{{ p.gender }}</td>
+                        <td>{{ p.disease or '—' }}</td>
+                        <td>{{ p.doctor.name if p.doctor else '—' }}</td>
+                        <td><span class="badge status-{{ p.status.lower().replace(' ','') }}">{{ p.status }}</span></td>
+                        <td>{{ p.admission_date.strftime('%d %b %Y') }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="8" class="text-center text-muted">No data.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% elif report_type == 'revenue' %}
+        <div class="mb-3">
+            <span class="badge bg-success fs-6">Total Revenue: ₹{{ '%.2f'|format(report.total_revenue) }}</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover table-sm">
+                <thead class="table-light"><tr><th>Bill No</th><th>Patient</th><th>Type</th><th>Total</th><th>Status</th><th>Date</th></tr></thead>
+                <tbody>
+                    {% for b in report.bills %}
+                    <tr>
+                        <td>{{ b.bill_number }}</td>
+                        <td>{{ b.patient.name }}</td>
+                        <td>{{ b.bill_type }}</td>
+                        <td>₹{{ '%.2f'|format(b.total) }}</td>
+                        <td><span class="badge {{ 'bg-success' if b.payment_status=='Paid' else 'bg-warning text-dark' }}">{{ b.payment_status }}</span></td>
+                        <td>{{ b.created_at.strftime('%d %b %Y') }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6" class="text-center text-muted">No bills.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% elif report_type == 'medicine' %}
+        <div class="table-responsive">
+            <table class="table table-hover table-sm">
+                <thead class="table-light"><tr><th>Name</th><th>Category</th><th>Batch</th><th>Qty</th><th>Expiry</th><th>Price</th></tr></thead>
+                <tbody>
+                    {% for m in report.medicines %}
+                    <tr class="{{ 'table-danger' if m.quantity < 5 else 'table-warning' if m.quantity < 10 else '' }}">
+                        <td>{{ m.name }}</td>
+                        <td>{{ m.category }}</td>
+                        <td>{{ m.batch_number }}</td>
+                        <td>{{ m.quantity }}</td>
+                        <td>{{ m.expiry_date.strftime('%d %b %Y') }}</td>
+                        <td>₹{{ '%.2f'|format(m.price) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}

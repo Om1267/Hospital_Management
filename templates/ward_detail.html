@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+{% block title %}Ward {{ ward.ward_number }}{% endblock %}
+{% block page_title %}Ward Detail{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h4 mb-0">Ward {{ ward.ward_number }} – {{ ward.ward_type }}</h1>
+    <a href="{{ url_for('wards') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>Back</a>
+</div>
+<div class="row g-3 mb-4">
+    <div class="col-md-3"><div class="stat-card bg-grad-blue"><div class="stat-icon"><i class="bi bi-hospital"></i></div><div class="stat-value">{{ ward.capacity }}</div><div class="stat-label">Total Beds</div></div></div>
+    <div class="col-md-3"><div class="stat-card bg-grad-green"><div class="stat-icon"><i class="bi bi-check2-circle"></i></div><div class="stat-value">{{ ward.available_beds }}</div><div class="stat-label">Available</div></div></div>
+    <div class="col-md-3"><div class="stat-card bg-grad-red"><div class="stat-icon"><i class="bi bi-person-fill"></i></div><div class="stat-value">{{ ward.occupied_beds }}</div><div class="stat-label">Occupied</div></div></div>
+    <div class="col-md-3"><div class="stat-card bg-grad-teal"><div class="stat-icon"><i class="bi bi-person-lines-fill"></i></div><div class="stat-value">{{ ward.nurses|length }}</div><div class="stat-label">Nurses Assigned</div></div></div>
+</div>
+<div class="row g-3">
+    <div class="col-md-7">
+        <div class="card">
+            <div class="card-header fw-semibold">Patients in this Ward</div>
+            <div class="card-body p-0">
+                <table class="table mb-0">
+                    <thead class="table-light"><tr><th>Name</th><th>Disease</th><th>Doctor</th><th>Status</th></tr></thead>
+                    <tbody>
+                        {% for p in ward.patients %}
+                        <tr>
+                            <td><a href="{{ url_for('patient_summary', patient_id=p.id) }}">{{ p.name }}</a></td>
+                            <td>{{ p.disease }}</td>
+                            <td>{{ p.doctor.name if p.doctor else '—' }}</td>
+                            <td><span class="badge status-{{ p.status.lower().replace(' ','') }}">{{ p.status }}</span></td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="4" class="text-center text-muted py-3">No patients.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-5">
+        <div class="card">
+            <div class="card-header fw-semibold">Nurses Assigned</div>
+            <div class="card-body p-0">
+                <table class="table mb-0">
+                    <thead class="table-light"><tr><th>Name</th><th>Shift</th></tr></thead>
+                    <tbody>
+                        {% for n in ward.nurses %}
+                        <tr><td>{{ n.name }}</td><td>{{ n.shift }}</td></tr>
+                        {% else %}
+                        <tr><td colspan="2" class="text-center text-muted py-3">No nurses assigned.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

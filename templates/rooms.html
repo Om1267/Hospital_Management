@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+{% block title %}Rooms{% endblock %}
+{% block page_title %}Rooms{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+    <h1 class="h4 mb-0"><i class="bi bi-door-open-fill text-primary me-2"></i>Room Management</h1>
+    {% if current_user.role == 'admin' %}
+    <a href="{{ url_for('add_room') }}" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Add Room</a>
+    {% endif %}
+</div>
+
+<!-- Filter -->
+<form method="GET" class="mb-4 d-flex flex-wrap gap-2">
+    {% for rtype in ['','General','Semi-Private','Private','ICU'] %}
+    <a href="{{ url_for('rooms', type=rtype) }}"
+       class="btn btn-sm {{ 'btn-primary' if selected_type == rtype else 'btn-outline-secondary' }}">
+        {{ rtype or 'All' }}
+    </a>
+    {% endfor %}
+</form>
+
+<div class="row g-3">
+    {% for r in rooms %}
+    <div class="col-sm-6 col-lg-4 col-xl-3">
+        <div class="card h-100 border-{{ 'success' if r.status=='Available' else 'danger' if r.status=='Occupied' else 'warning' }}" style="border-width:2px!important;">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h5 class="card-title mb-0">Room {{ r.room_number }}</h5>
+                    <span class="badge status-{{ r.status.lower() }}">{{ r.status }}</span>
+                </div>
+                <ul class="list-unstyled small text-muted mb-3">
+                    <li><i class="bi bi-tag me-2"></i>{{ r.room_type }}</li>
+                    <li><i class="bi bi-layers me-2"></i>Floor {{ r.floor }}</li>
+                    <li><i class="bi bi-currency-rupee me-2"></i>₹{{ r.daily_rate }}/day</li>
+                    {% if r.patients %}
+                    <li><i class="bi bi-person-fill me-2 text-danger"></i>{{ r.patients[-1].name }}</li>
+                    {% endif %}
+                </ul>
+                {% if current_user.role == 'admin' %}
+                <div class="d-flex gap-1">
+                    <a href="{{ url_for('room_detail', room_id=r.id) }}" class="btn btn-sm btn-outline-info flex-fill"><i class="bi bi-eye"></i></a>
+                    <a href="{{ url_for('edit_room', room_id=r.id) }}" class="btn btn-sm btn-outline-primary flex-fill"><i class="bi bi-pencil"></i></a>
+                    <form method="POST" action="{{ url_for('delete_room', room_id=r.id) }}" data-confirm="Delete Room {{ r.room_number }}?">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="col-12 text-center py-5 text-muted"><i class="bi bi-door-closed display-4 d-block mb-2"></i>No rooms found.</div>
+    {% endfor %}
+</div>
+{% endblock %}

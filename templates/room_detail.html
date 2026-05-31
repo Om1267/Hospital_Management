@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% block title %}Room {{ room.room_number }}{% endblock %}
+{% block page_title %}Room Detail{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h4 mb-0">Room {{ room.room_number }} – {{ room.room_type }}</h1>
+    <a href="{{ url_for('rooms') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>Back</a>
+</div>
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card text-center p-4">
+            <span class="badge status-{{ room.status.lower() }} fs-6 mb-2">{{ room.status }}</span>
+            <div class="text-muted small">Floor {{ room.floor }} &nbsp;|&nbsp; ₹{{ room.daily_rate }}/day</div>
+        </div>
+    </div>
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header fw-semibold">Patient History</div>
+            <div class="card-body p-0">
+                <table class="table mb-0">
+                    <thead class="table-light"><tr><th>Patient</th><th>Admitted</th><th>Discharged</th><th>Status</th></tr></thead>
+                    <tbody>
+                        {% for p in room.patients %}
+                        <tr>
+                            <td><a href="{{ url_for('patient_summary', patient_id=p.id) }}">{{ p.name }}</a></td>
+                            <td>{{ p.admission_date.strftime('%d %b %Y') }}</td>
+                            <td>{{ p.discharge_date.strftime('%d %b %Y') if p.discharge_date else '—' }}</td>
+                            <td><span class="badge status-{{ p.status.lower().replace(' ','') }}">{{ p.status }}</span></td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="4" class="text-center text-muted py-3">No patient history.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Bill {{ bill.bill_number }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { font-family: Arial, sans-serif; padding: 2rem; }
+        .header { border-bottom: 2px solid #0d6efd; margin-bottom: 1.5rem; }
+        @media print { .no-print { display: none; } }
+    </style>
+</head>
+<body>
+    <div class="header pb-3 mb-4">
+        <div class="d-flex justify-content-between">
+            <div>
+                <h2 class="text-primary fw-bold mb-0">Hospital+ HMS</h2>
+                <p class="text-muted mb-0">Healthcare Management System</p>
+            </div>
+            <div class="text-end">
+                <h5>INVOICE</h5>
+                <p class="mb-0"><strong>{{ bill.bill_number }}</strong></p>
+                <p class="text-muted small">{{ bill.created_at.strftime('%d %B %Y') }}</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-6">
+            <strong>Bill To:</strong>
+            <p class="mb-0">{{ bill.patient.name }}</p>
+            <p class="mb-0 text-muted">{{ bill.patient.mobile }}</p>
+            <p class="mb-0 text-muted">{{ bill.patient.email }}</p>
+        </div>
+        <div class="col-6 text-end">
+            <strong>Status:</strong>
+            <p><span class="badge {{ 'bg-success' if bill.payment_status=='Paid' else 'bg-warning text-dark' }}">{{ bill.payment_status }}</span></p>
+        </div>
+    </div>
+
+    <table class="table table-bordered">
+        <thead class="table-dark">
+            <tr><th>#</th><th>Description</th><th class="text-end">Amount (₹)</th></tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+            <tr><td>{{ loop.index }}</td><td>{{ item.description }}</td><td class="text-end">{{ '%.2f'|format(item.amount) }}</td></tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr><td colspan="2" class="text-end fw-medium">Subtotal</td><td class="text-end">₹{{ '%.2f'|format(bill.subtotal) }}</td></tr>
+            <tr><td colspan="2" class="text-end fw-medium">GST (5%)</td><td class="text-end">₹{{ '%.2f'|format(bill.gst) }}</td></tr>
+            {% if bill.discount %}<tr><td colspan="2" class="text-end fw-medium text-success">Discount</td><td class="text-end text-success">-₹{{ '%.2f'|format(bill.discount) }}</td></tr>{% endif %}
+            <tr class="table-success"><td colspan="2" class="text-end fw-bold">GRAND TOTAL</td><td class="text-end fw-bold">₹{{ '%.2f'|format(bill.total) }}</td></tr>
+        </tfoot>
+    </table>
+
+    <div class="text-muted small mt-4">
+        <p>Thank you for choosing Hospital+ HMS. Get well soon!</p>
+    </div>
+
+    <div class="no-print mt-4 d-flex gap-2">
+        <button onclick="window.print()" class="btn btn-primary"><i class="bi bi-printer me-1"></i>Print / Save PDF</button>
+        <a href="{{ url_for('bills') }}" class="btn btn-outline-secondary">Back</a>
+    </div>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+</body>
+</html>

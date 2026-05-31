@@ -1,0 +1,76 @@
+{% extends 'base.html' %}
+{% block title %}Medicines{% endblock %}
+{% block page_title %}Medicines{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h4 mb-0"><i class="bi bi-capsule-pill text-primary me-2"></i>Medicine Inventory</h1>
+    {% if current_user.role in ['admin','doctor'] %}
+    <a href="{{ url_for('add_medicine') }}" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Add Medicine</a>
+    {% endif %}
+</div>
+<form method="GET" class="mb-4">
+    <div class="input-group" style="max-width:400px;">
+        <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
+        <input type="text" name="q" class="form-control border-start-0" placeholder="Search medicine…" value="{{ search }}">
+        <button class="btn btn-primary" type="submit">Search</button>
+    </div>
+</form>
+
+{% set low_stock = medicines | selectattr('quantity', 'lt', 10) | list %}
+{% if low_stock %}
+<div class="alert alert-warning d-flex align-items-center gap-2 mb-4">
+    <i class="bi bi-exclamation-triangle-fill fs-5"></i>
+    <strong>{{ low_stock|length }} medicine(s) have low stock (&lt; 10 units).</strong>
+</div>
+{% endif %}
+
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr><th>ID</th><th>Name</th><th>Category</th><th>Batch</th><th>Qty</th><th>Expiry</th><th>Price (₹)</th><th class="text-end">Actions</th></tr>
+                </thead>
+                <tbody>
+                    {% for m in medicines %}
+                    <tr class="{{ 'low-stock' if m.quantity < 10 else '' }}">
+                        <td class="text-muted small">{{ m.id }}</td>
+                        <td class="fw-semibold">{{ m.name }}</td>
+                        <td>{{ m.category or '—' }}</td>
+                        <td>{{ m.batch_number }}</td>
+                        <td>
+                            {% if m.quantity < 5 %}
+                            <span class="badge bg-danger">{{ m.quantity }} ⚠</span>
+                            {% elif m.quantity < 10 %}
+                            <span class="badge bg-warning text-dark">{{ m.quantity }}</span>
+                            {% else %}
+                            <span class="badge bg-success">{{ m.quantity }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if m.expiry_date < today %}
+                            <span class="text-danger fw-semibold">{{ m.expiry_date.strftime('%d %b %Y') }} (Expired)</span>
+                            {% else %}
+                            {{ m.expiry_date.strftime('%d %b %Y') }}
+                            {% endif %}
+                        </td>
+                        <td>{{ '%.2f'|format(m.price) }}</td>
+                        <td class="text-end">
+                            {% if current_user.role in ['admin','doctor'] %}
+                            <a href="{{ url_for('edit_medicine', med_id=m.id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
+                            <form method="POST" action="{{ url_for('delete_medicine', med_id=m.id) }}" class="d-inline" data-confirm="Delete {{ m.name }}?">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                            </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="8" class="text-center text-muted py-4">No medicines found.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

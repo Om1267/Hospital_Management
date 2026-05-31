@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+{% block title %}Register{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-center align-items-center" style="min-height:70vh;">
+<div class="card shadow-sm" style="width:460px;">
+    <div class="card-header text-center fw-semibold py-3" style="background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;">
+        <i class="bi bi-person-plus-fill me-2"></i>Create New Account
+    </div>
+    <div class="card-body p-4">
+        <form method="POST" novalidate>
+            {{ form.hidden_tag() }}
+            <div class="mb-3">
+                {{ form.full_name.label(class="form-label fw-medium") }}
+                {{ form.full_name(class="form-control", placeholder="Full name") }}
+                {% for e in form.full_name.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+            </div>
+            <div class="mb-3">
+                {{ form.username.label(class="form-label fw-medium") }}
+                {{ form.username(class="form-control", placeholder="Username") }}
+                {% for e in form.username.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+            </div>
+            <div class="mb-3">
+                {{ form.email.label(class="form-label fw-medium") }}
+                {{ form.email(class="form-control", placeholder="Email") }}
+                {% for e in form.email.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+            </div>
+            <div class="mb-3">
+                {{ form.password.label(class="form-label fw-medium") }}
+                {{ form.password(class="form-control", placeholder="Password (min 6 chars)") }}
+                {% for e in form.password.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+            </div>
+            <div class="mb-4">
+                {{ form.role.label(class="form-label fw-medium") }}
+                {{ form.role(class="form-select") }}
+            </div>
+            <div class="d-grid">
+                {{ form.submit(class="btn btn-success fw-semibold py-2") }}
+            </div>
+        </form>
+        <hr class="my-3">
+        <p class="text-center mb-0 small text-muted">Already have an account? <a href="{{ url_for('login') }}">Sign in</a></p>
+    </div>
+</div>
+</div>
+{% endblock %}
