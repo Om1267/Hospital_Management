@@ -162,8 +162,8 @@ def test_new_features():
         print(f"Error downloading PDF: {e}")
         return False
 
-    # 4. Discharge the patient
-    print(f"\nDischarging patient #{patient_id}...")
+    # 4. Discharge the patient (Attempt 1: Should block and redirect to pending bill details)
+    print(f"\nDischarging patient #{patient_id} (Attempt 1: Unpaid bill)...")
     discharge_data = {
         'csrf_token': csrf_token or ''
     }
@@ -171,20 +171,70 @@ def test_new_features():
     req = urllib.request.Request(f'{BASE_URL}/patients/{patient_id}/discharge', data=data, method='POST')
     try:
         resp = urllib.request.urlopen(req)
-        summary_html_discharge = resp.read().decode('utf-8')
-        if 'Discharged' in summary_html_discharge:
-            print("SUCCESS: Patient status is now Discharged!")
-        else:
-            print("FAILED: Patient status did not change to Discharged.")
+        redirect_url = resp.geturl()
+        print(f"Discharge redirect URL: {redirect_url}")
+        
+        # Verify it redirected to bill payment page
+        bill_match = re.search(r'bills/(\d+)', redirect_url)
+        if not bill_match:
+            print("FAILED: Discharge did not redirect to pay outstanding bill.")
             return False
+        
+        bill_id = bill_match.group(1)
+        print(f"Outstanding Bill ID generated: {bill_id}")
+        
+        # Check summary page to verify patient status is STILL Admitted
+        summary_resp = urllib.request.urlopen(f'{BASE_URL}/patients/{patient_id}/summary')
+        summary_html = summary_resp.read().decode('utf-8')
+        if 'status-admitted' in summary_html.lower() or 'admitted' in summary_html.lower():
+            print("SUCCESS: Patient remains Admitted because bill is unpaid.")
+        else:
+            print("FAILED: Patient was discharged despite outstanding bill.")
+            return False
+            
     except Exception as e:
-        print(f"Error discharging patient: {e}")
+        print(f"Error during discharge Attempt 1: {e}")
         return False
 
-    # 5. Verify PDF download for bills
-    print(f"\nDownloading bill PDF for Bill #1...")
+    # 5. Pay the outstanding bill
+    print(f"\nPaying outstanding Bill #{bill_id}...")
+    pay_data = {
+        'csrf_token': csrf_token or ''
+    }
+    data = urllib.parse.urlencode(pay_data).encode('utf-8')
+    req = urllib.request.Request(f'{BASE_URL}/bills/{bill_id}/pay', data=data, method='POST')
     try:
-        pdf_resp = urllib.request.urlopen(f'{BASE_URL}/bills/1/pdf')
+        resp = urllib.request.urlopen(req)
+        # Should redirect back to patient summary page
+        print(f"Bill paid redirect URL: {resp.geturl()}")
+        if 'summary' in resp.geturl():
+            print("SUCCESS: Redirected back to summary page after payment!")
+        else:
+            print("FAILED: Did not redirect to summary page after paying bill.")
+            return False
+    except Exception as e:
+        print(f"Error paying bill: {e}")
+        return False
+
+    # 6. Discharge the patient (Attempt 2: Should succeed since bill is paid)
+    print(f"\nDischarging patient #{patient_id} (Attempt 2: Paid bill)...")
+    req = urllib.request.Request(f'{BASE_URL}/patients/{patient_id}/discharge', data=data, method='POST')
+    try:
+        resp = urllib.request.urlopen(req)
+        summary_html_discharge = resp.read().decode('utf-8')
+        if 'discharged' in summary_html_discharge.lower():
+            print("SUCCESS: Patient status is now Discharged!")
+        else:
+            print("FAILED: Patient status did not change to Discharged after paying bill.")
+            return False
+    except Exception as e:
+        print(f"Error during discharge Attempt 2: {e}")
+        return False
+
+    # 7. Verify PDF download for bills
+    print(f"\nDownloading bill PDF for Bill #{bill_id}...")
+    try:
+        pdf_resp = urllib.request.urlopen(f'{BASE_URL}/bills/{bill_id}/pdf')
         content_type = pdf_resp.headers.get('Content-Type')
         print(f"Bill PDF response Status: {pdf_resp.getcode()}, Content-Type: {content_type}")
         if pdf_resp.getcode() == 200 and 'application/pdf' in content_type:

@@ -81,6 +81,7 @@ class Ward(db.Model):
     capacity = db.Column(db.Integer, nullable=False, default=10)
     available_beds = db.Column(db.Integer, nullable=False, default=10)
     occupied_beds = db.Column(db.Integer, nullable=False, default=0)
+    daily_rate = db.Column(db.Float, default=300.0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     # Relationships

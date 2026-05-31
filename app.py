@@ -301,13 +301,90 @@ def patient_summary(patient_id):
 @app.route('/patients/<int:patient_id>/discharge', methods=['POST'])
 @login_required
 def discharge_patient(patient_id):
+    import random
     patient = Patient.query.get_or_404(patient_id)
     if patient.status == 'Discharged':
         flash('Patient is already discharged.', 'info')
         return redirect(url_for('patient_summary', patient_id=patient.id))
 
+    # 1. Check if stay charges/fees have already been billed in any bill (Paid or Pending)
+    has_stay_charges_billed = False
+    all_bills = Bill.query.filter_by(patient_id=patient.id).all()
+    for b in all_bills:
+        items = json.loads(b.items_json) if b.items_json else []
+        if any(item.get('description') == 'Doctor Consultation' for item in items):
+            has_stay_charges_billed = True
+            break
+
+    # Calculate stay duration
+    current_time = datetime.datetime.utcnow()
+    days = (current_time - patient.admission_date).days or 1
+
+    # If stay charges haven't been billed yet, we must bill them now
+    if not has_stay_charges_billed:
+        # We need to add stay charges. Do we have a pending bill?
+        pending_bill = Bill.query.filter_by(patient_id=patient.id, payment_status='Pending').first()
+        
+        # Calculate stay charges
+        stay_charge = 0.0
+        new_items = []
+        if patient.room:
+            stay_charge = round(patient.room.daily_rate * days, 2)
+            new_items.append({'description': f'Room {patient.room.room_number} ({days} days)', 'amount': stay_charge})
+        elif patient.ward:
+            ward_rate = getattr(patient.ward, 'daily_rate', 300.0) or 300.0
+            stay_charge = round(ward_rate * days, 2)
+            new_items.append({'description': f'Ward {patient.ward.ward_number} ({days} days)', 'amount': stay_charge})
+            
+        new_items.append({'description': 'Doctor Consultation', 'amount': 1000.0})
+        new_items.append({'description': 'Nursing Charges', 'amount': 500.0})
+        
+        if pending_bill:
+            # Append stay charges to the existing pending bill
+            items = json.loads(pending_bill.items_json) if pending_bill.items_json else []
+            items.extend(new_items)
+            pending_bill.items_json = json.dumps(items)
+            added_cost = stay_charge + 1500.0
+            pending_bill.subtotal = round(pending_bill.subtotal + added_cost, 2)
+            pending_bill.gst = round(pending_bill.subtotal * 0.05, 2)
+            pending_bill.total = round(pending_bill.subtotal + pending_bill.gst - pending_bill.discount, 2)
+            db.session.commit()
+            
+            flash(f'Stay charges and fees added to the running bill. Outstanding bill of ₹{pending_bill.total:.2f} must be paid before discharge.', 'warning')
+            return redirect(url_for('view_bill', bill_id=pending_bill.id))
+        else:
+            # Create a new pending bill with stay charges
+            subtotal = stay_charge + 1500.0
+            gst = round(subtotal * 0.05, 2)
+            bill_number = f'BILL{current_time.strftime("%Y%m%d%H%M%S")}{random.randint(10, 99)}'
+            
+            new_bill = Bill(
+                bill_number=bill_number,
+                bill_type='Hospital',
+                patient_id=patient.id,
+                items_json=json.dumps(new_items),
+                subtotal=round(subtotal, 2),
+                gst=gst,
+                discount=0.0,
+                total=round(subtotal + gst, 2),
+                payment_status='Pending'
+            )
+            db.session.add(new_bill)
+            db.session.commit()
+            
+            flash(f'Stay charges and fees finalized. Outstanding bill of ₹{new_bill.total:.2f} must be paid before discharge.', 'warning')
+            return redirect(url_for('view_bill', bill_id=new_bill.id))
+
+    # If we get here, stay charges have already been billed.
+    # Now check if there is any pending bill (could be the stay bill itself, or a new medicine bill)
+    pending_bill = Bill.query.filter_by(patient_id=patient.id, payment_status='Pending').first()
+    if pending_bill:
+        flash(f'Cannot discharge. Outstanding bill of ₹{pending_bill.total:.2f} must be paid before discharge.', 'warning')
+        return redirect(url_for('view_bill', bill_id=pending_bill.id))
+
+    # All bills paid and stay charges billed! Proceed with discharge
     patient.status = 'Discharged'
-    patient.discharge_date = datetime.datetime.utcnow()
+    patient.discharge_date = current_time
 
     # Free room
     if patient.room_id:
@@ -322,49 +399,8 @@ def discharge_patient(patient_id):
             wd.available_beds = min(wd.capacity, wd.available_beds + 1)
             wd.occupied_beds = max(0, wd.occupied_beds - 1)
 
-    # ── Running Bill Finalization ──
-    # Calculate stay duration
-    days = (patient.discharge_date - patient.admission_date).days or 1
-    room_charge = 0.0
-    if patient.room:
-        room_charge = round(patient.room.daily_rate * days, 2)
-
-    bill = Bill.query.filter_by(patient_id=patient.id, payment_status='Pending').first()
-    
-    # Stay line items to add
-    new_items = []
-    if room_charge > 0:
-        new_items.append({'description': f'Room {patient.room.room_number} ({days} days)', 'amount': room_charge})
-    new_items.append({'description': 'Doctor Consultation', 'amount': 1000.0})
-    new_items.append({'description': 'Nursing Charges', 'amount': 500.0})
-    
-    added_cost = room_charge + 1500.0
-    
-    if bill:
-        items = json.loads(bill.items_json) if bill.items_json else []
-        items.extend(new_items)
-        bill.items_json = json.dumps(items)
-        bill.subtotal = round(bill.subtotal + added_cost, 2)
-        bill.gst = round(bill.subtotal * 0.05, 2)
-        bill.total = round(bill.subtotal + bill.gst - bill.discount, 2)
-    else:
-        bill_number = f'BILL{datetime.datetime.utcnow().strftime("%Y%m%d%H%M%S")}'
-        gst = round(added_cost * 0.05, 2)
-        bill = Bill(
-            bill_number=bill_number,
-            bill_type='Hospital',
-            patient_id=patient.id,
-            items_json=json.dumps(new_items),
-            subtotal=round(added_cost, 2),
-            gst=gst,
-            discount=0.0,
-            total=round(added_cost + gst, 2),
-            payment_status='Pending'
-        )
-        db.session.add(bill)
-
     db.session.commit()
-    flash('Patient discharged successfully. Final bill generated.', 'success')
+    flash('Patient discharged successfully.', 'success')
     return redirect(url_for('patient_summary', patient_id=patient.id))
 
 
@@ -850,13 +886,20 @@ def create_bill():
         items = []
         subtotal = 0.0
 
-        # Room charges
-        if patient and patient.room and patient.admission_date:
+        # Room/Ward charges
+        if patient and patient.admission_date:
             days = (datetime.datetime.utcnow() - patient.admission_date).days or 1
-            room_charge = patient.room.daily_rate * days
-            items.append({'description': f'Room {patient.room.room_number} ({days} days)',
-                          'amount': room_charge})
-            subtotal += room_charge
+            if patient.room:
+                room_charge = patient.room.daily_rate * days
+                items.append({'description': f'Room {patient.room.room_number} ({days} days)',
+                              'amount': room_charge})
+                subtotal += room_charge
+            elif patient.ward:
+                ward_rate = getattr(patient.ward, 'daily_rate', 300.0) or 300.0
+                ward_charge = ward_rate * days
+                items.append({'description': f'Ward {patient.ward.ward_number} ({days} days)',
+                              'amount': ward_charge})
+                subtotal += ward_charge
 
         # Doctor charge
         doctor_charge = float(f.get('doctor_charge', 0))
@@ -922,7 +965,7 @@ def mark_bill_paid(bill_id):
     bill.payment_status = 'Paid'
     db.session.commit()
     flash('Bill marked as paid.', 'success')
-    return redirect(url_for('view_bill', bill_id=bill.id))
+    return redirect(url_for('patient_summary', patient_id=bill.patient_id))
 
 
 @app.route('/bills/<int:bill_id>/print')
@@ -1460,11 +1503,13 @@ def seed_data():
 
     # Wards
     ward_types = ['General', 'ICU', 'Pediatric', 'Surgical', 'Maternity']
+    ward_rates = {'General': 300.0, 'ICU': 1500.0, 'Pediatric': 400.0, 'Surgical': 800.0, 'Maternity': 500.0}
     wards_created = []
     for i, wt in enumerate(ward_types):
         ward = Ward(
             ward_number=f'W{i+1:02}', ward_type=wt,
-            capacity=10, available_beds=10, occupied_beds=0
+            capacity=10, available_beds=10, occupied_beds=0,
+            daily_rate=ward_rates.get(wt, 300.0)
         )
         db.session.add(ward)
         wards_created.append(ward)
