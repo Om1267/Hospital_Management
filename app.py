@@ -13,6 +13,8 @@ from flask import (
     Flask, render_template, redirect, url_for,
     flash, request, jsonify, make_response
 )
+import logging
+from logging.handlers import RotatingFileHandler
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import (
     LoginManager, login_user, logout_user,
@@ -38,10 +40,56 @@ app.config.from_object(Config)
 db.init_app(app)
 csrf = CSRFProtect(app)
 
+# Setup Logging
+if not app.debug:
+    if not os.path.exists(app.config['LOG_DIR']):
+        os.mkdir(app.config['LOG_DIR'])
+    file_handler = RotatingFileHandler(app.config['LOG_FILE'], maxBytes=10240, backupCount=10)
+    file_handler.setFormatter(logging.Formatter(
+        '%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]'
+    ))
+    file_handler.setLevel(logging.INFO)
+    app.logger.addHandler(file_handler)
+    app.logger.setLevel(logging.INFO)
+    app.logger.info('Hospital Management startup')
+
 login_manager = LoginManager()
 login_manager.login_view = 'login'
 login_manager.login_message_category = 'warning'
 login_manager.init_app(app)
+
+
+# ─── Global Error Handlers ───────────────────────────────────────────────────
+@app.errorhandler(404)
+def not_found_error(error):
+    app.logger.error(f'Page not found: {request.url}')
+    return render_template('404.html'), 404
+
+@app.errorhandler(403)
+def forbidden_error(error):
+    app.logger.error(f'Forbidden access: {request.url} by {current_user}')
+    return render_template('403.html'), 403
+
+@app.errorhandler(500)
+def internal_error(error):
+    db.session.rollback()
+    app.logger.error(f'Server Error: {error}')
+    return render_template('500.html'), 500
+
+
+# ─── Utility Functions ───────────────────────────────────────────────────────
+def commit_or_rollback(success_msg, error_msg, redirect_url, flash_category='success'):
+    """Helper to commit to DB and rollback on failure"""
+    try:
+        db.session.commit()
+        flash(success_msg, flash_category)
+        return redirect(redirect_url)
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"{error_msg}: {str(e)}")
+        flash(f"{error_msg}. Please try again later.", 'danger')
+        return redirect(redirect_url)
+
 
 
 @login_manager.user_loader
@@ -126,9 +174,7 @@ def register():
             )
             u.set_password(form.password.data)
             db.session.add(u)
-            db.session.commit()
-            flash('Account created. Please log in.', 'success')
-            return redirect(url_for('login'))
+            return commit_or_rollback('Account created. Please log in.', 'Unable to create account', url_for('login'))
     return render_template('register.html', form=form)
 
 
@@ -215,9 +261,7 @@ def add_patient():
             admission_date=datetime.datetime.utcnow()
         )
         db.session.add(patient)
-        db.session.commit()
-        flash('Patient admitted successfully.', 'success')
-        return redirect(url_for('patients'))
+        return commit_or_rollback('Patient admitted successfully.', 'Failed to add patient', url_for('patients'))
     return render_template('patient_form.html', action='Add', doctors=doctors, rooms=rooms, wards=wards, patient=None)
 
 
@@ -256,9 +300,7 @@ def edit_patient(patient_id):
                 if wd:
                     wd.available_beds = min(wd.capacity, wd.available_beds + 1)
                     wd.occupied_beds = max(0, wd.occupied_beds - 1)
-        db.session.commit()
-        flash('Patient record updated.', 'success')
-        return redirect(url_for('patients'))
+        return commit_or_rollback('Patient record updated.', 'Failed to update patient record', url_for('patients'))
     return render_template('patient_form.html', action='Edit', doctors=doctors, rooms=rooms, wards=wards, patient=patient)
 
 
@@ -278,9 +320,7 @@ def delete_patient(patient_id):
             wd.available_beds = min(wd.capacity, wd.available_beds + 1)
             wd.occupied_beds = max(0, wd.occupied_beds - 1)
     db.session.delete(patient)
-    db.session.commit()
-    flash('Patient deleted.', 'success')
-    return redirect(url_for('patients'))
+    return commit_or_rollback('Patient deleted.', 'Failed to delete patient', url_for('patients'))
 
 
 @app.route('/patients/<int:patient_id>/summary')
@@ -348,10 +388,7 @@ def discharge_patient(patient_id):
             pending_bill.subtotal = round(pending_bill.subtotal + added_cost, 2)
             pending_bill.gst = round(pending_bill.subtotal * 0.05, 2)
             pending_bill.total = round(pending_bill.subtotal + pending_bill.gst - pending_bill.discount, 2)
-            db.session.commit()
-            
-            flash(f'Stay charges and fees added to the running bill. Outstanding bill of ₹{pending_bill.total:.2f} must be paid before discharge.', 'warning')
-            return redirect(url_for('view_bill', bill_id=pending_bill.id))
+            return commit_or_rollback(f'Stay charges and fees added to the running bill. Outstanding bill of ₹{pending_bill.total:.2f} must be paid before discharge.', 'Failed to update bill', url_for('view_bill', bill_id=pending_bill.id), 'warning')
         else:
             # Create a new pending bill with stay charges
             subtotal = stay_charge + 1500.0
@@ -370,10 +407,7 @@ def discharge_patient(patient_id):
                 payment_status='Pending'
             )
             db.session.add(new_bill)
-            db.session.commit()
-            
-            flash(f'Stay charges and fees finalized. Outstanding bill of ₹{new_bill.total:.2f} must be paid before discharge.', 'warning')
-            return redirect(url_for('view_bill', bill_id=new_bill.id))
+            return commit_or_rollback(f'Stay charges and fees finalized. Outstanding bill of ₹{new_bill.total:.2f} must be paid before discharge.', 'Failed to create bill', url_for('view_bill', bill_id=new_bill.id), 'warning')
 
     # If we get here, stay charges have already been billed.
     # Now check if there is any pending bill (could be the stay bill itself, or a new medicine bill)
@@ -399,9 +433,7 @@ def discharge_patient(patient_id):
             wd.available_beds = min(wd.capacity, wd.available_beds + 1)
             wd.occupied_beds = max(0, wd.occupied_beds - 1)
 
-    db.session.commit()
-    flash('Patient discharged successfully.', 'success')
-    return redirect(url_for('patient_summary', patient_id=patient.id))
+    return commit_or_rollback('Patient discharged successfully.', 'Failed to discharge patient', url_for('patient_summary', patient_id=patient.id))
 
 
 @app.route('/patients/<int:patient_id>/prescribe', methods=['POST'])
@@ -463,9 +495,7 @@ def prescribe_medicine(patient_id):
         )
         db.session.add(bill)
 
-    db.session.commit()
-    flash(f'Prescribed {quantity} of {med.name} successfully. Running bill updated.', 'success')
-    return redirect(url_for('patient_summary', patient_id=patient.id))
+    return commit_or_rollback(f'Prescribed {quantity} of {med.name} successfully. Running bill updated.', 'Failed to prescribe medicine', url_for('patient_summary', patient_id=patient.id))
 
 
 # ─── Doctors ─────────────────────────────────────────────────────────────────
@@ -498,9 +528,7 @@ def add_doctor():
             salary=float(f.get('salary', 0))
         )
         db.session.add(doc)
-        db.session.commit()
-        flash('Doctor added.', 'success')
-        return redirect(url_for('doctors'))
+        return commit_or_rollback('Doctor added.', 'Failed to add doctor', url_for('doctors'))
     return render_template('doctor_form.html', action='Add', doctor=None)
 
 
@@ -519,9 +547,7 @@ def edit_doctor(doctor_id):
         doctor.email = f.get('email', '')
         doctor.availability = f.get('availability', 'Available')
         doctor.salary = float(f.get('salary', 0))
-        db.session.commit()
-        flash('Doctor updated.', 'success')
-        return redirect(url_for('doctors'))
+        return commit_or_rollback('Doctor updated.', 'Failed to update doctor', url_for('doctors'))
     return render_template('doctor_form.html', action='Edit', doctor=doctor)
 
 
@@ -531,9 +557,7 @@ def edit_doctor(doctor_id):
 def delete_doctor(doctor_id):
     doctor = Doctor.query.get_or_404(doctor_id)
     db.session.delete(doctor)
-    db.session.commit()
-    flash('Doctor removed.', 'success')
-    return redirect(url_for('doctors'))
+    return commit_or_rollback('Doctor removed.', 'Failed to remove doctor', url_for('doctors'))
 
 
 # ─── Nurses ──────────────────────────────────────────────────────────────────
@@ -557,9 +581,7 @@ def add_nurse():
             ward_id=f.get('ward_id') or None
         )
         db.session.add(nurse)
-        db.session.commit()
-        flash('Nurse added.', 'success')
-        return redirect(url_for('nurses'))
+        return commit_or_rollback('Nurse added.', 'Failed to add nurse', url_for('nurses'))
     return render_template('nurse_form.html', action='Add', nurse=None, wards=wards)
 
 
@@ -576,9 +598,7 @@ def edit_nurse(nurse_id):
         nurse.contact = f['contact']
         nurse.email = f.get('email', '')
         nurse.ward_id = f.get('ward_id') or None
-        db.session.commit()
-        flash('Nurse updated.', 'success')
-        return redirect(url_for('nurses'))
+        return commit_or_rollback('Nurse updated.', 'Failed to update nurse', url_for('nurses'))
     return render_template('nurse_form.html', action='Edit', nurse=nurse, wards=wards)
 
 
@@ -588,9 +608,7 @@ def edit_nurse(nurse_id):
 def delete_nurse(nurse_id):
     nurse = Nurse.query.get_or_404(nurse_id)
     db.session.delete(nurse)
-    db.session.commit()
-    flash('Nurse removed.', 'success')
-    return redirect(url_for('nurses'))
+    return commit_or_rollback('Nurse removed.', 'Failed to remove nurse', url_for('nurses'))
 
 
 # ─── Wards ───────────────────────────────────────────────────────────────────
@@ -613,9 +631,7 @@ def add_ward():
             capacity=cap, available_beds=cap, occupied_beds=0
         )
         db.session.add(ward)
-        db.session.commit()
-        flash('Ward created.', 'success')
-        return redirect(url_for('wards'))
+        return commit_or_rollback('Ward created.', 'Failed to create ward', url_for('wards'))
     return render_template('ward_form.html', action='Add', ward=None)
 
 
@@ -629,9 +645,7 @@ def edit_ward(ward_id):
         ward.ward_number = f['ward_number']
         ward.ward_type = f['ward_type']
         ward.capacity = int(f.get('capacity', ward.capacity))
-        db.session.commit()
-        flash('Ward updated.', 'success')
-        return redirect(url_for('wards'))
+        return commit_or_rollback('Ward updated.', 'Failed to update ward', url_for('wards'))
     return render_template('ward_form.html', action='Edit', ward=ward)
 
 
@@ -641,9 +655,7 @@ def edit_ward(ward_id):
 def delete_ward(ward_id):
     ward = Ward.query.get_or_404(ward_id)
     db.session.delete(ward)
-    db.session.commit()
-    flash('Ward deleted.', 'success')
-    return redirect(url_for('wards'))
+    return commit_or_rollback('Ward deleted.', 'Failed to delete ward', url_for('wards'))
 
 
 @app.route('/wards/<int:ward_id>')
@@ -677,9 +689,7 @@ def add_room():
             daily_rate=float(f.get('daily_rate', 500))
         )
         db.session.add(room)
-        db.session.commit()
-        flash('Room added.', 'success')
-        return redirect(url_for('rooms'))
+        return commit_or_rollback('Room added.', 'Failed to add room', url_for('rooms'))
     return render_template('room_form.html', action='Add', room=None)
 
 
@@ -695,9 +705,7 @@ def edit_room(room_id):
         room.floor = int(f.get('floor', room.floor))
         room.status = f.get('status', room.status)
         room.daily_rate = float(f.get('daily_rate', room.daily_rate))
-        db.session.commit()
-        flash('Room updated.', 'success')
-        return redirect(url_for('rooms'))
+        return commit_or_rollback('Room updated.', 'Failed to update room', url_for('rooms'))
     return render_template('room_form.html', action='Edit', room=room)
 
 
@@ -707,9 +715,7 @@ def edit_room(room_id):
 def delete_room(room_id):
     room = Room.query.get_or_404(room_id)
     db.session.delete(room)
-    db.session.commit()
-    flash('Room deleted.', 'success')
-    return redirect(url_for('rooms'))
+    return commit_or_rollback('Room deleted.', 'Failed to delete room', url_for('rooms'))
 
 
 @app.route('/rooms/<int:room_id>')
@@ -748,9 +754,7 @@ def add_appointment():
             status='Scheduled'
         )
         db.session.add(appt)
-        db.session.commit()
-        flash('Appointment booked.', 'success')
-        return redirect(url_for('appointments'))
+        return commit_or_rollback('Appointment booked.', 'Failed to book appointment', url_for('appointments'))
     return render_template('appointment_form.html', action='Book',
                            appt=None, patients=patients_all, doctors=doctors_all)
 
@@ -769,9 +773,7 @@ def edit_appointment(appt_id):
         appt.time = f['time']
         appt.notes = f.get('notes', '')
         appt.status = f.get('status', appt.status)
-        db.session.commit()
-        flash('Appointment updated.', 'success')
-        return redirect(url_for('appointments'))
+        return commit_or_rollback('Appointment updated.', 'Failed to update appointment', url_for('appointments'))
     return render_template('appointment_form.html', action='Edit',
                            appt=appt, patients=patients_all, doctors=doctors_all)
 
@@ -781,9 +783,7 @@ def edit_appointment(appt_id):
 def cancel_appointment(appt_id):
     appt = Appointment.query.get_or_404(appt_id)
     appt.status = 'Cancelled'
-    db.session.commit()
-    flash('Appointment cancelled.', 'info')
-    return redirect(url_for('appointments'))
+    return commit_or_rollback('Appointment cancelled.', 'Failed to cancel appointment', url_for('appointments'), 'info')
 
 
 @app.route('/appointments/<int:appt_id>/delete', methods=['POST'])
@@ -792,9 +792,7 @@ def cancel_appointment(appt_id):
 def delete_appointment(appt_id):
     appt = Appointment.query.get_or_404(appt_id)
     db.session.delete(appt)
-    db.session.commit()
-    flash('Appointment deleted.', 'success')
-    return redirect(url_for('appointments'))
+    return commit_or_rollback('Appointment deleted.', 'Failed to delete appointment', url_for('appointments'))
 
 
 # ─── Medicines ───────────────────────────────────────────────────────────────
@@ -825,9 +823,7 @@ def add_medicine():
             category=f.get('category', '')
         )
         db.session.add(med)
-        db.session.commit()
-        flash('Medicine added.', 'success')
-        return redirect(url_for('medicines'))
+        return commit_or_rollback('Medicine added.', 'Failed to add medicine', url_for('medicines'))
     return render_template('medicine_form.html', action='Add', med=None)
 
 
@@ -845,9 +841,7 @@ def edit_medicine(med_id):
         med.price = float(f['price'])
         med.manufacturer = f.get('manufacturer', '')
         med.category = f.get('category', '')
-        db.session.commit()
-        flash('Medicine updated.', 'success')
-        return redirect(url_for('medicines'))
+        return commit_or_rollback('Medicine updated.', 'Failed to update medicine', url_for('medicines'))
     return render_template('medicine_form.html', action='Edit', med=med)
 
 
@@ -857,9 +851,7 @@ def edit_medicine(med_id):
 def delete_medicine(med_id):
     med = Medicine.query.get_or_404(med_id)
     db.session.delete(med)
-    db.session.commit()
-    flash('Medicine deleted.', 'success')
-    return redirect(url_for('medicines'))
+    return commit_or_rollback('Medicine deleted.', 'Failed to delete medicine', url_for('medicines'))
 
 
 # ─── Bills ───────────────────────────────────────────────────────────────────
@@ -943,9 +935,7 @@ def create_bill():
             total=total, payment_status='Pending'
         )
         db.session.add(bill)
-        db.session.commit()
-        flash(f'Bill {bill_number} created.', 'success')
-        return redirect(url_for('view_bill', bill_id=bill.id))
+        return commit_or_rollback(f'Bill {bill_number} created.', 'Failed to create bill', url_for('view_bill', bill_id=bill.id))
     return render_template('bill_form.html', patients=all_patients, medicines=all_medicines)
 
 
@@ -963,9 +953,7 @@ def view_bill(bill_id):
 def mark_bill_paid(bill_id):
     bill = Bill.query.get_or_404(bill_id)
     bill.payment_status = 'Paid'
-    db.session.commit()
-    flash('Bill marked as paid.', 'success')
-    return redirect(url_for('patient_summary', patient_id=bill.patient_id))
+    return commit_or_rollback('Bill marked as paid.', 'Failed to mark bill as paid', url_for('patient_summary', patient_id=bill.patient_id))
 
 
 @app.route('/bills/<int:bill_id>/print')
@@ -982,9 +970,7 @@ def print_bill(bill_id):
 def delete_bill(bill_id):
     bill = Bill.query.get_or_404(bill_id)
     db.session.delete(bill)
-    db.session.commit()
-    flash('Bill deleted.', 'success')
-    return redirect(url_for('bills'))
+    return commit_or_rollback('Bill deleted.', 'Failed to delete bill', url_for('bills'))
 
 
 # ─── Reports ─────────────────────────────────────────────────────────────────

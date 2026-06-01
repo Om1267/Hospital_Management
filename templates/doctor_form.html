@@ -13,7 +13,7 @@
             <div class="row g-3">
                 <div class="col-md-6">
                     <label class="form-label fw-medium">Full Name *</label>
-                    <input type="text" name="name" class="form-control" required value="{{ doctor.name if doctor else '' }}">
+                    <input type="text" name="name" class="form-control" required minlength="2" maxlength="100" value="{{ doctor.name if doctor else '' }}">
                 </div>
                 <div class="col-md-6">
                     <label class="form-label fw-medium">Department *</label>
@@ -41,7 +41,7 @@
                 </div>
                 <div class="col-md-4">
                     <label class="form-label fw-medium">Contact *</label>
-                    <input type="text" name="contact" class="form-control" required value="{{ doctor.contact if doctor else '' }}">
+                    <input type="text" name="contact" class="form-control" required pattern="^\+?[\d\s-]{10,15}$" value="{{ doctor.contact if doctor else '' }}">
                 </div>
                 <div class="col-md-4">
                     <label class="form-label fw-medium">Email</label>

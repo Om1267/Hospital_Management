@@ -12,7 +12,7 @@
         <div class="row g-3">
             <div class="col-md-4">
                 <label class="form-label fw-medium">Ward Number *</label>
-                <input type="text" name="ward_number" class="form-control" required value="{{ ward.ward_number if ward else '' }}" placeholder="e.g. W01">
+                <input type="text" name="ward_number" class="form-control" required maxlength="20" value="{{ ward.ward_number if ward else '' }}" placeholder="e.g. W01">
             </div>
             <div class="col-md-4">
                 <label class="form-label fw-medium">Ward Type *</label>

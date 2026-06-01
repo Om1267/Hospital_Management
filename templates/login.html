@@ -35,7 +35,7 @@
                     <label class="form-label fw-medium">Username</label>
                     <div class="input-group">
                         <span class="input-group-text bg-light"><i class="bi bi-person"></i></span>
-                        {{ form.username(class="form-control", placeholder="Enter username", id="username") }}
+                        {{ form.username(class="form-control", placeholder="Enter username", id="username", required=True) }}
                     </div>
                     {% for e in form.username.errors %}
                         <div class="text-danger small mt-1">{{ e }}</div>
@@ -45,7 +45,7 @@
                     <label class="form-label fw-medium">Password</label>
                     <div class="input-group">
                         <span class="input-group-text bg-light"><i class="bi bi-lock"></i></span>
-                        {{ form.password(class="form-control", placeholder="Enter password", id="password") }}
+                        {{ form.password(class="form-control", placeholder="Enter password", id="password", required=True) }}
                         <button class="btn btn-outline-secondary" type="button" onclick="togglePass('password', this)">
                             <i class="bi bi-eye"></i>
                         </button>
@@ -71,5 +71,6 @@
             btn.querySelector('i').className = inp.type === 'password' ? 'bi bi-eye' : 'bi bi-eye-slash';
         }
     </script>
+    <script src="{{ url_for('static', filename='js/validation.js') }}"></script>
 </body>
 </html>

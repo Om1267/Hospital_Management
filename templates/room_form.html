@@ -12,7 +12,7 @@
         <div class="row g-3">
             <div class="col-md-3">
                 <label class="form-label fw-medium">Room Number *</label>
-                <input type="text" name="room_number" class="form-control" required value="{{ room.room_number if room else '' }}" placeholder="e.g. 101">
+                <input type="text" name="room_number" class="form-control" required maxlength="20" value="{{ room.room_number if room else '' }}" placeholder="e.g. 101">
             </div>
             <div class="col-md-3">
                 <label class="form-label fw-medium">Room Type *</label>

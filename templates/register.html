@@ -11,22 +11,22 @@
             {{ form.hidden_tag() }}
             <div class="mb-3">
                 {{ form.full_name.label(class="form-label fw-medium") }}
-                {{ form.full_name(class="form-control", placeholder="Full name") }}
+                <input type="text" name="full_name" class="form-control" required minlength="2" maxlength="100" placeholder="Full name" value="{{ form.full_name.data if form.full_name.data else '' }}">
                 {% for e in form.full_name.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
             </div>
             <div class="mb-3">
                 {{ form.username.label(class="form-label fw-medium") }}
-                {{ form.username(class="form-control", placeholder="Username") }}
+                <input type="text" name="username" class="form-control" required minlength="4" maxlength="25" placeholder="Username" value="{{ form.username.data if form.username.data else '' }}">
                 {% for e in form.username.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
             </div>
             <div class="mb-3">
                 {{ form.email.label(class="form-label fw-medium") }}
-                {{ form.email(class="form-control", placeholder="Email") }}
+                <input type="email" name="email" class="form-control" required placeholder="Email" value="{{ form.email.data if form.email.data else '' }}">
                 {% for e in form.email.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
             </div>
             <div class="mb-3">
                 {{ form.password.label(class="form-label fw-medium") }}
-                {{ form.password(class="form-control", placeholder="Password (min 6 chars)") }}
+                <input type="password" name="password" class="form-control" required minlength="6" placeholder="Password (min 6 chars)">
                 {% for e in form.password.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
             </div>
             <div class="mb-4">

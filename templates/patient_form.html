@@ -16,7 +16,7 @@
             <div class="row g-3">
                 <div class="col-md-4">
                     <label class="form-label fw-medium">Full Name *</label>
-                    <input type="text" name="name" class="form-control" required
+                    <input type="text" name="name" class="form-control" required minlength="2" maxlength="100"
                            value="{{ patient.name if patient else '' }}" placeholder="Patient full name">
                 </div>
                 <div class="col-md-2">
@@ -45,7 +45,7 @@
 
                 <div class="col-md-4">
                     <label class="form-label fw-medium">Mobile *</label>
-                    <input type="text" name="mobile" class="form-control" required
+                    <input type="text" name="mobile" class="form-control" required pattern="^\+?[\d\s-]{10,15}$"
                            value="{{ patient.mobile if patient else '' }}" placeholder="10-digit mobile">
                 </div>
                 <div class="col-md-4">
@@ -55,7 +55,7 @@
                 </div>
                 <div class="col-md-4">
                     <label class="form-label fw-medium">Emergency Contact</label>
-                    <input type="text" name="emergency_contact" class="form-control"
+                    <input type="text" name="emergency_contact" class="form-control" pattern="^\+?[\d\s-]{10,15}$"
                            value="{{ patient.emergency_contact if patient else '' }}">
                 </div>
 
@@ -67,7 +67,7 @@
 
                 <div class="col-md-6">
                     <label class="form-label fw-medium">Disease / Diagnosis</label>
-                    <input type="text" name="disease" class="form-control"
+                    <input type="text" name="disease" class="form-control" maxlength="200"
                            value="{{ patient.disease if patient else '' }}" placeholder="e.g. Typhoid, Fracture…">
                 </div>
                 <div class="col-md-6">
