@@ -1,4 +1,6 @@
-# Hospital Management System
+# 🏥 Hospital Management System
+
+![Python](https://img.shields.io/badge/Python-3.10+-blue?logo=python) ![Flask](https://img.shields.io/badge/Flask-3.0-green?logo=flask) ![License](https://img.shields.io/badge/License-MIT-yellow)
 
 A **production-ready** Hospital Management System built with **Python Flask**, **SQLAlchemy**, **Bootstrap 5**, and **Chart.js**.
 
@@ -78,4 +80,5 @@ MIT © 2026
 - Prescription management
 - Ward & bed management
 - Audit logs for all critical actions
+
 
