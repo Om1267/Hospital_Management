@@ -69,3 +69,13 @@ Hospital_Management/
 ## License
 
 MIT © 2026
+
+
+## Key Features
+- Role-based access control (Admin, Doctor, Nurse)
+- Patient registration & discharge management
+- Automated billing with PDF export
+- Prescription management
+- Ward & bed management
+- Audit logs for all critical actions
+
