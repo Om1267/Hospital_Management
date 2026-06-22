@@ -8,6 +8,7 @@ db = SQLAlchemy()
 
 # ── Users ────────────────────────────────────────────────────────────────────
 class User(UserMixin, db.Model):
+    """Model representing a system user with authentication and role."""
     __tablename__ = 'users'
 
     id = db.Column(db.Integer, primary_key=True)
