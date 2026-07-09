@@ -14,7 +14,7 @@
     --transition: all .25s ease;
 }
 
-/* ── Reset / Base ── */
+/* ── Reset / Base / Norm ── */
 *, *::before, *::after { box-sizing: border-box; }
 
 body {
