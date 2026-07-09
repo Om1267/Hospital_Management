@@ -1,5 +1,5 @@
 /* ============================================================
-   main.js – AJAX live stats, sidebar, toast, utilities
+   main.js – AJAX live stats, sidebar, toast, helpers
    ============================================================ */
 
 'use strict';
