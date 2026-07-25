@@ -106,6 +106,11 @@ def load_user(user_id):
 
 # ─── Role Decorator ──────────────────────────────────────────────────────────
 def role_required(*roles):
+    """Decorator to restrict route access to specific user roles.
+    
+    Args:
+        *roles: Allowed roles (e.g., 'admin', 'doctor', 'nurse')
+    """
     def decorator(f):
         @wraps(f)
         def decorated(*args, **kwargs):
