@@ -79,7 +79,14 @@ def internal_error(error):
 
 # ─── Utility Functions ───────────────────────────────────────────────────────
 def commit_or_rollback(success_msg, error_msg, redirect_url, flash_category='success'):
-    """Helper to commit to DB and rollback on failure"""
+    """Helper to commit transaction to database and rollback on database exception.
+    
+    Args:
+        success_msg (str): Message to flash on success
+        error_msg (str): Message prefix to flash on error
+        redirect_url (str): Target URL to redirect
+        flash_category (str): Flask flash category ('success', 'warning', etc.)
+    """
     try:
         db.session.commit()
         flash(success_msg, flash_category)
