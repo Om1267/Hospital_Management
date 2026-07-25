@@ -62,16 +62,19 @@ login_manager.init_app(app)
 # ─── Global Error Handlers ───────────────────────────────────────────────────
 @app.errorhandler(404)
 def not_found_error(error):
+    """Handle 404 Not Found errors by logging the URL and rendering the custom 404 template."""
     app.logger.error(f'Page not found: {request.url}')
     return render_template('404.html'), 404
 
 @app.errorhandler(403)
 def forbidden_error(error):
+    """Handle 403 Forbidden errors by logging the unauthorized access attempt."""
     app.logger.error(f'Forbidden access: {request.url} by {current_user}')
     return render_template('403.html'), 403
 
 @app.errorhandler(500)
 def internal_error(error):
+    """Handle 500 Internal Server Error by rolling back the DB session and logging the error."""
     db.session.rollback()
     app.logger.error(f'Server Error: {error}')
     return render_template('500.html'), 500
