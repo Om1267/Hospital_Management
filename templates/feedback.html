@@ -1,0 +1,165 @@
+{% extends 'base.html' %}
+
+{% block title %}Patient Feedback{% endblock %}
+{% block page_title %}Patient Feedback{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h3 mb-0 text-gray-800">⭐ Patient Feedback & Quality Review</h1>
+        <p class="text-muted mb-0">Track patient satisfaction scores, categories, and reviews</p>
+    </div>
+    <button class="btn btn-primary" data-bs-toggle="collapse" data-bs-target="#submitFeedbackCard">
+        <i class="bi bi-chat-heart me-1"></i> Submit Feedback
+    </button>
+</div>
+
+<!-- Submit Feedback Card (Collapsible) -->
+<div class="collapse mb-4" id="submitFeedbackCard">
+    <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white border-0 py-3">
+            <h5 class="fw-bold mb-0 text-dark">Submit Service Feedback</h5>
+        </div>
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('submit_feedback') }}" class="row g-3">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="col-md-6">
+                    <label class="form-label fw-medium">Patient Full Name</label>
+                    <input type="text" name="patient_name" class="form-control form-control-sm" placeholder="e.g. Rahul Gupta" required>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-medium">Email Address</label>
+                    <input type="email" name="email" class="form-control form-control-sm" placeholder="e.g. rahul@example.com" required>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-medium">Feedback Category</label>
+                    <select name="category" class="form-select form-select-sm" required>
+                        <option value="Overall">Overall Experience</option>
+                        <option value="Doctors">Doctor Care</option>
+                        <option value="Nurses">Nursing Staff</option>
+                        <option value="Cleanliness">Hygiene & Cleanliness</option>
+                        <option value="Billing">Billing & Reception</option>
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-medium">Rating (1 to 5 Stars)</label>
+                    <select name="rating" class="form-select form-select-sm" required>
+                        <option value="5">⭐⭐⭐⭐⭐ (Excellent)</option>
+                        <option value="4">⭐⭐⭐⭐ (Good)</option>
+                        <option value="3">⭐⭐⭐ (Average)</option>
+                        <option value="2">⭐⭐ (Poor)</option>
+                        <option value="1">⭐ (Very Bad)</option>
+                    </select>
+                </div>
+                <div class="col-12">
+                    <label class="form-label fw-medium">Comments / Suggestions</label>
+                    <textarea name="comments" class="form-control form-control-sm" rows="3" placeholder="Describe your experience in detail..." required></textarea>
+                </div>
+                <div class="col-12 text-end">
+                    <button type="button" class="btn btn-sm btn-light me-1" data-bs-toggle="collapse" data-bs-target="#submitFeedbackCard">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-primary">Submit Feedback</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Ratings Overview Row -->
+<div class="row g-3 mb-4">
+    <!-- Left: Score Card -->
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm h-100 text-center py-4 bg-white">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold uppercase mb-2">Average Satisfaction</div>
+                <h1 class="display-3 fw-bold text-warning mb-1">
+                    {% if stats.avg_rating %}{{ "%.1f"|format(stats.avg_rating) }}{% else %}0.0{% endif %}
+                </h1>
+                <div class="text-warning mb-3">
+                    {% if stats.avg_rating %}
+                        {% for i in range((stats.avg_rating | round(0, 'floor')) | int) %}
+                            <i class="bi bi-star-fill fs-5"></i>
+                        {% endfor %}
+                        {% if stats.avg_rating % 1 >= 0.5 %}
+                            <i class="bi bi-star-half fs-5"></i>
+                        {% endif %}
+                    {% else %}
+                        <i class="bi bi-star text-muted"></i>
+                    {% endif %}
+                </div>
+                <div class="text-muted small">Based on {{ stats.total }} reviews</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right: Progress by category -->
+    <div class="col-md-8">
+        <div class="card border-0 shadow-sm h-100 p-4 bg-white">
+            <h5 class="fw-bold mb-3 text-dark">Category Satisfaction Scores</h5>
+            {% for cat, val in stats.cat_stats.items() %}
+            <div class="mb-3">
+                <div class="d-flex justify-content-between mb-1">
+                    <span class="small fw-semibold text-dark">{{ cat }}</span>
+                    <span class="small fw-bold text-primary">{{ "%.1f"|format(val.avg) }} ★ ({{ val.count }})</span>
+                </div>
+                <div class="progress" style="height: 8px;">
+                    <div class="progress-bar bg-warning rounded" role="progressbar" 
+                         style="width: {{ (val.avg / 5.0) * 100 }}%"></div>
+                </div>
+            </div>
+            {% else %}
+            <div class="text-center py-5 text-muted">
+                No ratings submitted yet.
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- Feedback Card List -->
+<h5 class="fw-bold mb-3 text-dark">Recent Reviews</h5>
+<div class="row g-3">
+    {% for item in reviews %}
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <div>
+                        <h6 class="fw-bold mb-1 text-dark">{{ item.patient_name }}</h6>
+                        <span class="small text-muted">{{ item.email }}</span>
+                    </div>
+                    <div class="text-end">
+                        <div class="text-warning small mb-1">
+                            {% for i in range(item.rating) %}
+                            <i class="bi bi-star-fill"></i>
+                            {% endfor %}
+                            {% for i in range(5 - item.rating) %}
+                            <i class="bi bi-star text-muted"></i>
+                            {% endfor %}
+                        </div>
+                        <span class="badge bg-light text-dark border small">{{ item.category }}</span>
+                    </div>
+                </div>
+                <p class="text-muted card-text small mt-3" style="line-height: 1.5;">
+                    "{{ item.comments }}"
+                </p>
+                <div class="d-flex justify-content-between align-items-center mt-3 pt-2 border-top">
+                    <span class="text-muted small" style="font-size: 0.75rem;">
+                        <i class="bi bi-clock me-1"></i> {{ item.created_at.strftime('%d %b %Y, %H:%M') }}
+                    </span>
+                    <form method="POST" action="{{ url_for('delete_feedback', feedback_id=item.id) }}" data-confirm="Remove this feedback review?">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-sm text-danger border-0 p-0" title="Delete Review">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="col-12 text-center py-5 text-muted">
+        No patient reviews found.
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

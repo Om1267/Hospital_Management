@@ -2,6 +2,7 @@ import urllib.request
 import urllib.parse
 import re
 import sys
+import datetime
 
 # Setup opener with cookie jar
 cookie_processor = urllib.request.HTTPCookieProcessor()
@@ -248,6 +249,246 @@ def test_new_features():
 
     return True
 
+
+def test_new_6_features():
+    print("\n--- Testing the 6 New Hospital Modules ---")
+    
+    # Get initial CSRF token by hitting patient summary
+    try:
+        resp = urllib.request.urlopen(f'{BASE_URL}/patients/1/summary')
+        html = resp.read().decode('utf-8')
+        csrf_token = get_csrf_token(html)
+    except Exception as e:
+        print(f"Error fetching patient summary CSRF: {e}")
+        return False
+
+    # 1. Lab Tests
+    print("\nTesting Lab Tests Module...")
+    try:
+        # Request a new test
+        data = urllib.parse.urlencode({
+            'csrf_token': csrf_token or '',
+            'patient_id': '1',
+            'test_name': 'Blood sugar test',
+            'category': 'Blood Test',
+            'cost': '200.0'
+        }).encode('utf-8')
+        req = urllib.request.Request(f'{BASE_URL}/lab_tests/add', data=data, method='POST')
+        resp = urllib.request.urlopen(req)
+        
+        # Verify it shows up in lab tests list
+        list_resp = urllib.request.urlopen(f'{BASE_URL}/lab_tests')
+        list_html = list_resp.read().decode('utf-8')
+        if 'Blood sugar test' in list_html:
+            print("  SUCCESS: Lab test requested and listed.")
+        else:
+            print("  FAILED: Lab test request not found in list.")
+            return False
+
+        # Update test result
+        data = urllib.parse.urlencode({
+            'csrf_token': csrf_token or '',
+            'result': 'Normal (95 mg/dL)'
+        }).encode('utf-8')
+        # Seed lab tests: CBC is 1, MRI is 2. The new one should be ID 3.
+        req = urllib.request.Request(f'{BASE_URL}/lab_tests/3/update', data=data, method='POST')
+        resp = urllib.request.urlopen(req)
+        
+        list_resp_after = urllib.request.urlopen(f'{BASE_URL}/lab_tests')
+        list_html_after = list_resp_after.read().decode('utf-8')
+        if 'Normal (95 mg/dL)' in list_html_after:
+            print("  SUCCESS: Lab test result updated and completed.")
+        else:
+            print("  FAILED: Lab test result update not shown.")
+            return False
+    except Exception as e:
+        print(f"  EXCEPTION in Lab Tests test: {e}")
+        return False
+
+    # 2. Ambulances
+    print("\nTesting Ambulances Module...")
+    try:
+        # Add new ambulance
+        data = urllib.parse.urlencode({
+            'csrf_token': csrf_token or '',
+            'vehicle_number': 'DL-4CD-3456',
+            'driver_name': 'Harish Kumar',
+            'driver_contact': '9876543213',
+            'status': 'Available'
+        }).encode('utf-8')
+        req = urllib.request.Request(f'{BASE_URL}/ambulances/add', data=data, method='POST')
+        resp = urllib.request.urlopen(req)
+
+        # Verify added
+        list_resp = urllib.request.urlopen(f'{BASE_URL}/ambulances')
+        list_html = list_resp.read().decode('utf-8')
+        if 'DL-4CD-3456' in list_html:
+            print("  SUCCESS: New ambulance registered.")
+        else:
+            print("  FAILED: Registered ambulance not listed.")
+            return False
+
+        # Book ambulance
+        data = urllib.parse.urlencode({
+            'csrf_token': csrf_token or '',
+            'ambulance_id': '1', # Rajesh Kumar is available
+            'patient_name': 'Rahul Gupta',
+            'destination': 'Noida Sector-62',
+            'charges': '800.0'
+        }).encode('utf-8')
+        req = urllib.request.Request(f'{BASE_URL}/ambulances/book', data=data, method='POST')
+        resp = urllib.request.urlopen(req)
+
+        # Check booking exists (seed booking was ID 1, so this new one is ID 2)
+        list_resp_after = urllib.request.urlopen(f'{BASE_URL}/ambulances')
+        list_html_after = list_resp_after.read().decode('utf-8')
+        if 'Noida Sector-62' in list_html_after:
+            print("  SUCCESS: Ambulance dispatch booking created.")
+        else:
+            print("  FAILED: Ambulance booking not found in log.")
+            return False
+
+        # Complete booking
+        data = urllib.parse.urlencode({'csrf_token': csrf_token or ''}).encode('utf-8')
+        req = urllib.request.Request(f'{BASE_URL}/ambulances/booking/2/complete?action=Completed', data=data, method='POST')
+        resp = urllib.request.urlopen(req)
+        print("  SUCCESS: Ambulance booking completed.")
+    except Exception as e:
+        print(f"  EXCEPTION in Ambulances test: {e}")
+        return False
+
+    # 3. Duty Roster
+    print("\nTesting Duty Roster Module...")
+    try:
+        today_str = datetime.date.today().strftime('%Y-%m-%d')
+        # Schedule shift
+        data = urllib.parse.urlencode({
+            'csrf_token': csrf_token or '',
+            'shift_date': today_str,
+            'staff_type': 'doctor',
+            'doctor_id': '1',
+            'shift_type': 'Night',
+            'ward_id': ''
+        }).encode('utf-8')
+        req = urllib.request.Request(f'{BASE_URL}/roster/add', data=data, method='POST')
+        resp = urllib.request.urlopen(req)
+
+        # Check in list
+        list_resp = urllib.request.urlopen(f'{BASE_URL}/roster?date={today_str}')
+        list_html = list_resp.read().decode('utf-8')
+        if 'Night' in list_html:
+            print("  SUCCESS: Shift scheduled in roster.")
+        else:
+            print("  FAILED: Scheduled shift not found in roster list.")
+            return False
+
+        # Update roster entry (seeds were 1 and 2, so this new roster entry is ID 3)
+        data = urllib.parse.urlencode({'csrf_token': csrf_token or ''}).encode('utf-8')
+        req = urllib.request.Request(f'{BASE_URL}/roster/3/update?status=Completed', data=data, method='POST')
+        resp = urllib.request.urlopen(req)
+        print("  SUCCESS: Shift status updated to Completed.")
+    except Exception as e:
+        print(f"  EXCEPTION in Duty Roster test: {e}")
+        return False
+
+    # 4. Visitor Logs
+    print("\nTesting Visitor Logs Module...")
+    try:
+        # Check in visitor
+        data = urllib.parse.urlencode({
+            'csrf_token': csrf_token or '',
+            'patient_id': '1',
+            'visitor_name': 'Aman Gupta',
+            'contact': '9876543214',
+            'relationship': 'Sibling'
+        }).encode('utf-8')
+        req = urllib.request.Request(f'{BASE_URL}/visitors/checkin', data=data, method='POST')
+        resp = urllib.request.urlopen(req)
+
+        # Verify listed
+        list_resp = urllib.request.urlopen(f'{BASE_URL}/visitors')
+        list_html = list_resp.read().decode('utf-8')
+        if 'Aman Gupta' in list_html:
+            print("  SUCCESS: Visitor pass checked-in.")
+        else:
+            print("  FAILED: Checked-in visitor not listed.")
+            return False
+
+        # Check out visitor (seed visitor was 1, so this is ID 2)
+        data = urllib.parse.urlencode({'csrf_token': csrf_token or ''}).encode('utf-8')
+        req = urllib.request.Request(f'{BASE_URL}/visitors/2/checkout', data=data, method='POST')
+        resp = urllib.request.urlopen(req)
+        print("  SUCCESS: Visitor checked-out.")
+    except Exception as e:
+        print(f"  EXCEPTION in Visitor Logs test: {e}")
+        return False
+
+    # 5. Insurance Claims
+    print("\nTesting Insurance Claims Module...")
+    try:
+        # File claim
+        data = urllib.parse.urlencode({
+            'csrf_token': csrf_token or '',
+            'patient_id': '1',
+            'insurance_provider': 'LIC Insurance',
+            'policy_number': 'POL-112233',
+            'claim_amount': '15000.0'
+        }).encode('utf-8')
+        req = urllib.request.Request(f'{BASE_URL}/claims/add', data=data, method='POST')
+        resp = urllib.request.urlopen(req)
+
+        # Verify listed
+        list_resp = urllib.request.urlopen(f'{BASE_URL}/claims')
+        list_html = list_resp.read().decode('utf-8')
+        if 'LIC Insurance' in list_html:
+            print("  SUCCESS: Insurance claim filed.")
+        else:
+            print("  FAILED: Filed insurance claim not listed.")
+            return False
+
+        # Approve claim (seed claim was 1, so this is ID 2)
+        data = urllib.parse.urlencode({
+            'csrf_token': csrf_token or '',
+            'status': 'Approved',
+            'approved_amount': '10000.0'
+        }).encode('utf-8')
+        req = urllib.request.Request(f'{BASE_URL}/claims/2/update', data=data, method='POST')
+        resp = urllib.request.urlopen(req)
+        print("  SUCCESS: Insurance claim approved.")
+    except Exception as e:
+        print(f"  EXCEPTION in Insurance Claims test: {e}")
+        return False
+
+    # 6. Patient Feedback
+    print("\nTesting Feedback Module...")
+    try:
+        # Submit feedback
+        data = urllib.parse.urlencode({
+            'csrf_token': csrf_token or '',
+            'patient_name': 'Tester Customer',
+            'email': 'tester@example.com',
+            'rating': '5',
+            'category': 'Overall',
+            'comments': 'Great overall service!'
+        }).encode('utf-8')
+        req = urllib.request.Request(f'{BASE_URL}/feedback/submit', data=data, method='POST')
+        resp = urllib.request.urlopen(req)
+
+        # Verify listed
+        list_resp = urllib.request.urlopen(f'{BASE_URL}/feedback')
+        list_html = list_resp.read().decode('utf-8')
+        if 'Tester Customer' in list_html and 'Great overall service!' in list_html:
+            print("  SUCCESS: Feedback submitted and listed successfully.")
+        else:
+            print("  FAILED: Submitted feedback not found in reviews list.")
+            return False
+    except Exception as e:
+        print(f"  EXCEPTION in Feedback test: {e}")
+        return False
+
+    return True
+
+
 def main():
     if not login('admin', 'admin123'):
         print("Login failed, aborting tests.")
@@ -265,7 +506,13 @@ def main():
         '/bills',
         '/reports',
         '/profile',
-        '/register'
+        '/register',
+        '/lab_tests',
+        '/ambulances',
+        '/roster',
+        '/visitors',
+        '/claims',
+        '/feedback'
     ]
     
     print("\nStarting basic route testing...")
@@ -275,6 +522,9 @@ def main():
             all_ok = False
             
     if not test_new_features():
+        all_ok = False
+        
+    if not test_new_6_features():
         all_ok = False
         
     if all_ok:

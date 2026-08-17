@@ -1,0 +1,223 @@
+{% extends 'base.html' %}
+
+{% block title %}Visitor Passes & Logs{% endblock %}
+{% block page_title %}Visitor Logs{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h3 mb-0 text-gray-800">📇 Visitor Logs & Passes</h1>
+        <p class="text-muted mb-0">Issue visitor passes and monitor active visitors inside hospital wards</p>
+    </div>
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#checkinVisitorModal">
+        <i class="bi bi-card-heading me-1"></i> Issue Visitor Pass
+    </button>
+</div>
+
+<!-- Tabs -->
+<ul class="nav nav-tabs border-bottom mb-4" id="visitorTabs" role="tablist">
+    <li class="nav-item">
+        <button class="nav-link active" id="active-tab" data-bs-toggle="tab" data-bs-target="#active" type="button">
+            <i class="bi bi-person-check-fill me-1"></i> Active Visitors ({% if active_visitors %}{{ active_visitors|length }}{% else %}0{% endif %})
+        </button>
+    </li>
+    <li class="nav-item">
+        <button class="nav-link" id="history-tab" data-bs-toggle="tab" data-bs-target="#history" type="button">
+            <i class="bi bi-clock-history me-1"></i> Visitor History
+        </button>
+    </li>
+</ul>
+
+<div class="tab-content" id="visitorTabsContent">
+    <!-- Tab 1: Active Visitors -->
+    <div class="tab-pane fade show active" id="active" role="tabpanel">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-4">Pass No.</th>
+                                <th>Visitor Name</th>
+                                <th>Relationship</th>
+                                <th>Visiting Patient</th>
+                                <th>Check-In Time</th>
+                                <th class="text-end pe-4">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for log in active_visitors %}
+                            <tr>
+                                <td class="ps-4 fw-bold text-primary"><i class="bi bi-tag-fill me-1"></i>{{ log.pass_number }}</td>
+                                <td>
+                                    <div class="fw-semibold text-dark">{{ log.visitor_name }}</div>
+                                    <div class="small text-muted">{{ log.contact }}</div>
+                                </td>
+                                <td><span class="badge bg-secondary-subtle text-secondary">{{ log.relationship }}</span></td>
+                                <td>
+                                    <a href="{{ url_for('patient_summary', patient_id=log.patient_id) }}" class="text-decoration-none fw-semibold">
+                                        {{ log.patient.name }}
+                                    </a>
+                                    <div class="small text-muted">
+                                        {% if log.patient.room %}Room {{ log.patient.room.room_number }}{% endif %}
+                                        {% if log.patient.ward %}Ward {{ log.patient.ward.ward_number }}{% endif %}
+                                    </div>
+                                </td>
+                                <td class="text-muted">{{ log.check_in_time.strftime('%d %b %Y, %H:%M') }}</td>
+                                <td class="text-end pe-4">
+                                    <form method="POST" action="{{ url_for('visitor_checkout', log_id=log.id) }}" class="d-inline">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn btn-sm btn-success">
+                                            <i class="bi bi-box-arrow-right me-1"></i> Check Out
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="6" class="text-center py-5 text-muted">
+                                    <i class="bi bi-people fs-2 mb-2 d-block"></i>
+                                    No visitors currently logged in.
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tab 2: History -->
+    <div class="tab-pane fade" id="history" role="tabpanel">
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body py-3">
+                <form method="GET" action="{{ url_for('visitor_logs') }}" class="row g-2 align-items-center">
+                    <div class="col-md-9">
+                        <input type="text" name="search" class="form-control form-control-sm" placeholder="Search visitor name, contact, patient or pass..." value="{{ request.args.get('search', '') }}">
+                    </div>
+                    <div class="col-md-3">
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-sm btn-secondary w-100">Search</button>
+                            <a href="{{ url_for('visitor_logs') }}" class="btn btn-sm btn-outline-secondary">Reset</a>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-4">Pass No.</th>
+                                <th>Visitor Name</th>
+                                <th>Relationship</th>
+                                <th>Visiting Patient</th>
+                                <th>Checked In</th>
+                                <th>Checked Out</th>
+                                <th class="pe-4">Duration</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for log in history_visitors %}
+                            <tr>
+                                <td class="ps-4 fw-semibold text-muted">{{ log.pass_number }}</td>
+                                <td>
+                                    <div class="fw-semibold text-dark">{{ log.visitor_name }}</div>
+                                    <div class="small text-muted">{{ log.contact }}</div>
+                                </td>
+                                <td><span class="badge bg-light text-muted border">{{ log.relationship }}</span></td>
+                                <td>{{ log.patient.name }}</td>
+                                <td class="text-muted">{{ log.check_in_time.strftime('%d %b %y, %H:%M') }}</td>
+                                <td class="text-muted">
+                                    {% if log.check_out_time %}
+                                    {{ log.check_out_time.strftime('%d %b %y, %H:%M') }}
+                                    {% else %}
+                                    —
+                                    {% endif %}
+                                </td>
+                                <td class="pe-4 text-muted small">
+                                    {% if log.check_out_time %}
+                                        {% set duration = (log.check_out_time - log.check_in_time) %}
+                                        {% set mins = (duration.total_seconds() / 60) | int %}
+                                        {% if mins < 60 %}
+                                            {{ mins }} mins
+                                        {% else %}
+                                            {{ (mins / 60) | int }}h {{ mins % 60 }}m
+                                        {% endif %}
+                                    {% else %}
+                                        Active
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="7" class="text-center py-4 text-muted">
+                                    No historical logs found.
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Check-in Visitor -->
+<div class="modal fade" id="checkinVisitorModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold">Issue Visitor Pass</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('visitor_checkin') }}">
+                <div class="modal-body">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Select Admitted Patient</label>
+                        <select name="patient_id" class="form-select" required>
+                            <option value="">-- Choose Admitted Patient --</option>
+                            {% for p in patients %}
+                            <option value="{{ p.id }}">{{ p.name }} (Room {{ p.room.room_number if p.room else 'Ward ' ~ p.ward.ward_number }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Visitor Full Name</label>
+                        <input type="text" name="visitor_name" class="form-control" placeholder="e.g. John Doe" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Contact Number</label>
+                        <input type="text" name="contact" class="form-control" placeholder="e.g. 9876543210" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Relationship to Patient</label>
+                        <select name="relationship" class="form-select" required>
+                            <option value="Spouse">Spouse</option>
+                            <option value="Parent">Parent</option>
+                            <option value="Child">Child</option>
+                            <option value="Sibling">Sibling</option>
+                            <option value="Friend">Friend</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Generate Pass</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

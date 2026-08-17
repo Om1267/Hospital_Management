@@ -188,5 +188,217 @@
             </div>
         </div>
     </div>
+
+    <!-- Lab Tests -->
+    <div class="col-lg-12">
+        <div class="card">
+            <div class="card-header fw-semibold" style="background:linear-gradient(90deg,#00b4db,#0083b0);color:#fff;">
+                <i class="bi bi-flask me-2"></i>Laboratory Tests
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-7">
+                        <h6 class="fw-semibold mb-2">Requested Tests & Results</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Test Name</th>
+                                        <th>Category</th>
+                                        <th>Cost</th>
+                                        <th>Status</th>
+                                        <th>Result</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for t in patient.lab_tests %}
+                                    <tr>
+                                        <td class="fw-semibold">{{ t.test_name }}</td>
+                                        <td><span class="badge bg-secondary-subtle text-secondary small">{{ t.category }}</span></td>
+                                        <td>₹{{ '%.2f'|format(t.cost) }}</td>
+                                        <td>
+                                            <span class="badge {% if t.status == 'Completed' %}bg-success-subtle text-success{% else %}bg-warning-subtle text-warning{% endif %}">
+                                                {{ t.status }}
+                                            </span>
+                                        </td>
+                                        <td class="small">
+                                            {% if t.result %}{{ t.result }}{% else %}<span class="text-muted"><em>Pending</em></span>{% endif %}
+                                        </td>
+                                    </tr>
+                                    {% else %}
+                                    <tr>
+                                        <td colspan="5" class="text-center text-muted py-3">No laboratory tests requested yet.</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="col-md-5 border-start">
+                        <h6 class="fw-semibold mb-2">Request Lab Test</h6>
+                        {% if patient.status != 'Discharged' %}
+                        <form method="POST" action="{{ url_for('add_lab_test') }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="patient_id" value="{{ patient.id }}">
+                            <input type="hidden" name="redirect_to" value="patient_summary">
+                            <div class="mb-2">
+                                <label class="form-label small fw-medium">Test Name *</label>
+                                <input type="text" name="test_name" class="form-control form-control-sm" placeholder="e.g. Complete Blood Count" required>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small fw-medium">Category *</label>
+                                <select name="category" class="form-select form-select-sm" required>
+                                    <option value="Blood Test">Blood Test</option>
+                                    <option value="Radiology">Radiology (X-Ray, MRI)</option>
+                                    <option value="Urine Test">Urine Test</option>
+                                    <option value="Pathology">Pathology</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small fw-medium">Cost (₹) *</label>
+                                <input type="number" step="0.01" name="cost" class="form-control form-control-sm" placeholder="500.00" required>
+                            </div>
+                            <button type="submit" class="btn btn-sm btn-primary w-100">
+                                <i class="bi bi-plus-lg me-1"></i>Request Test
+                            </button>
+                        </form>
+                        {% else %}
+                        <p class="text-muted small py-3"><i class="bi bi-info-circle me-1"></i>Cannot request tests for a discharged patient.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Visitor Logs & Insurance Claims -->
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header fw-semibold"><i class="bi bi-card-list me-2 text-primary"></i>Visitor Passes & Active Guests</div>
+            <div class="card-body">
+                <table class="table table-sm table-hover mb-3">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Pass No.</th>
+                            <th>Visitor</th>
+                            <th>Relation</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in patient.visitor_logs %}
+                        <tr>
+                            <td class="fw-semibold text-primary">{{ log.pass_number }}</td>
+                            <td>
+                                <div>{{ log.visitor_name }}</div>
+                                <div class="small text-muted" style="font-size:0.75rem;">{{ log.contact }}</div>
+                            </td>
+                            <td><span class="badge bg-light text-dark border">{{ log.relationship }}</span></td>
+                            <td>
+                                <span class="badge {% if log.status == 'Active' %}bg-success-subtle text-success{% else %}bg-secondary-subtle text-secondary{% endif %}">
+                                    {{ log.status }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="4" class="text-center text-muted py-2">No visitors registered.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% if patient.status != 'Discharged' %}
+                <div class="border-top pt-2">
+                    <h6 class="fw-semibold small mb-2">Issue Visitor Pass</h6>
+                    <form method="POST" action="{{ url_for('visitor_checkin') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="patient_id" value="{{ patient.id }}">
+                        <input type="hidden" name="redirect_to" value="patient_summary">
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <input type="text" name="visitor_name" class="form-control form-control-sm" placeholder="Visitor Name" required>
+                            </div>
+                            <div class="col-6">
+                                <input type="text" name="contact" class="form-control form-control-sm" placeholder="Contact" required>
+                            </div>
+                            <div class="col-8">
+                                <select name="relationship" class="form-select form-select-sm" required>
+                                    <option value="Spouse">Spouse</option>
+                                    <option value="Parent">Parent</option>
+                                    <option value="Child">Child</option>
+                                    <option value="Sibling">Sibling</option>
+                                    <option value="Friend">Friend</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                            </div>
+                            <div class="col-4">
+                                <button type="submit" class="btn btn-sm btn-primary w-100"><i class="bi bi-plus-lg"></i> Issue</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header fw-semibold"><i class="bi bi-shield-check me-2 text-success"></i>Insurance Claims</div>
+            <div class="card-body">
+                <table class="table table-sm table-hover mb-3">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Provider</th>
+                            <th>Policy No.</th>
+                            <th>Claimed</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for claim in patient.insurance_claims %}
+                        <tr>
+                            <td class="fw-semibold text-dark">{{ claim.insurance_provider }}</td>
+                            <td>{{ claim.policy_number }}</td>
+                            <td>₹{{ '%.2f'|format(claim.claim_amount) }}</td>
+                            <td>
+                                <span class="badge 
+                                    {% if claim.status == 'Approved' %}bg-success-subtle text-success
+                                    {% elif claim.status == 'Rejected' %}bg-danger-subtle text-danger
+                                    {% else %}bg-warning-subtle text-warning{% endif %}">
+                                    {{ claim.status }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="4" class="text-center text-muted py-2">No insurance claims filed.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% if patient.status != 'Discharged' %}
+                <div class="border-top pt-2">
+                    <h6 class="fw-semibold small mb-2">Initiate Claim</h6>
+                    <form method="POST" action="{{ url_for('add_claim') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="patient_id" value="{{ patient.id }}">
+                        <input type="hidden" name="redirect_to" value="patient_summary">
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <input type="text" name="insurance_provider" class="form-control form-control-sm" placeholder="Provider" required>
+                            </div>
+                            <div class="col-6">
+                                <input type="text" name="policy_number" class="form-control form-control-sm" placeholder="Policy No." required>
+                            </div>
+                            <div class="col-8">
+                                <input type="number" step="0.01" name="claim_amount" class="form-control form-control-sm" placeholder="Amount (₹)" required>
+                            </div>
+                            <div class="col-4">
+                                <button type="submit" class="btn btn-sm btn-success w-100"><i class="bi bi-plus-lg"></i> File</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}

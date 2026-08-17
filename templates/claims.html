@@ -1,0 +1,253 @@
+{% extends 'base.html' %}
+
+{% block title %}Insurance Claims{% endblock %}
+{% block page_title %}Insurance Claims{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h3 mb-0 text-gray-800">🛡️ Insurance & TPA Claims</h1>
+        <p class="text-muted mb-0">Initiate, monitor, and finalize third-party claims and approvals</p>
+    </div>
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newClaimModal">
+        <i class="bi bi-shield-plus me-1"></i> File New Claim
+    </button>
+</div>
+
+<!-- Insurance Metrics -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm p-3 bg-white">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="text-muted small fw-semibold">Total Claims</div>
+                    <div class="h3 fw-bold mb-0 mt-1 text-primary">{{ claim_stats.total_count }}</div>
+                </div>
+                <div class="p-3 bg-primary-subtle text-primary rounded-3">
+                    <i class="bi bi-shield-check fs-4"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm p-3 bg-white">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="text-muted small fw-semibold">Pending Amount</div>
+                    <div class="h3 fw-bold mb-0 mt-1 text-warning">₹{{ "%.2f"|format(claim_stats.pending_amount) }}</div>
+                </div>
+                <div class="p-3 bg-warning-subtle text-warning rounded-3">
+                    <i class="bi bi-clock-history fs-4"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm p-3 bg-white">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="text-muted small fw-semibold">Approved Amount</div>
+                    <div class="h3 fw-bold mb-0 mt-1 text-success">₹{{ "%.2f"|format(claim_stats.approved_amount) }}</div>
+                </div>
+                <div class="p-3 bg-success-subtle text-success rounded-3">
+                    <i class="bi bi-wallet2 fs-4"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm p-3 bg-white">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="text-muted small fw-semibold">Approved Claims</div>
+                    <div class="h3 fw-bold mb-0 mt-1 text-success">{{ claim_stats.approved_count }}</div>
+                </div>
+                <div class="p-3 bg-success-subtle text-success rounded-3">
+                    <i class="bi bi-check-lg fs-4"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Claims Table -->
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-4">Patient</th>
+                        <th>Provider & Policy</th>
+                        <th>Claim Amount</th>
+                        <th>Approved Amount</th>
+                        <th>Date Filed</th>
+                        <th>Status</th>
+                        <th class="text-end pe-4">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for claim in claims %}
+                    <tr>
+                        <td class="ps-4">
+                            <a href="{{ url_for('patient_summary', patient_id=claim.patient_id) }}" class="text-decoration-none fw-semibold text-dark">
+                                {{ claim.patient.name }}
+                            </a>
+                            <div class="small text-muted">ID: #{{ claim.patient_id }}</div>
+                        </td>
+                        <td>
+                            <div class="fw-semibold text-dark">{{ claim.insurance_provider }}</div>
+                            <div class="small text-muted"><i class="bi bi-file-earmark-medical me-1"></i>{{ claim.policy_number }}</div>
+                        </td>
+                        <td class="fw-semibold text-dark">₹{{ "%.2f"|format(claim.claim_amount) }}</td>
+                        <td class="fw-semibold text-success">
+                            {% if claim.status == 'Approved' %}
+                            ₹{{ "%.2f"|format(claim.approved_amount) }}
+                            {% elif claim.status == 'Rejected' %}
+                            ₹0.00
+                            {% else %}
+                            <span class="text-muted small"><em>Pending</em></span>
+                            {% endif %}
+                        </td>
+                        <td class="text-muted">{{ claim.created_at.strftime('%d %b %Y, %H:%M') }}</td>
+                        <td>
+                            <span class="badge 
+                                {% if claim.status == 'Approved' %}bg-success-subtle text-success
+                                {% elif claim.status == 'Rejected' %}bg-danger-subtle text-danger
+                                {% elif claim.status == 'Pending Approval' %}bg-warning-subtle text-warning
+                                {% else %}bg-primary-subtle text-primary{% endif %}">
+                                {{ claim.status }}
+                            </span>
+                        </td>
+                        <td class="text-end pe-4">
+                            {% if claim.status in ['Initiated', 'Pending Approval'] %}
+                            <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#updateClaimModal{{ claim.id }}">
+                                <i class="bi bi-pencil-square"></i> Review
+                            </button>
+                            {% endif %}
+                            <form method="POST" action="{{ url_for('delete_claim', claim_id=claim.id) }}" class="d-inline ms-1" data-confirm="Delete this claim entry?">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-sm btn-outline-danger border-0">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+
+                    <!-- Review Claim Modal for each claim -->
+                    <div class="modal fade" id="updateClaimModal{{ claim.id }}" tabindex="-1">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title fw-bold">Review Claim Request</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <form method="POST" action="{{ url_for('update_claim', claim_id=claim.id) }}">
+                                    <div class="modal-body">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <div class="mb-3">
+                                            <label class="form-label fw-medium">Patient</label>
+                                            <input type="text" class="form-control" value="{{ claim.patient.name }}" disabled>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label fw-medium">Claim Amount Requested</label>
+                                            <input type="text" class="form-control" value="₹{{ claim.claim_amount }}" disabled>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label fw-medium">Update Status</label>
+                                            <select name="status" id="claimStatusSelect{{ claim.id }}" class="form-select" onchange="toggleApprovedAmountInput({{ claim.id }})" required>
+                                                <option value="Pending Approval" {% if claim.status == 'Pending Approval' %}selected{% endif %}>Pending Approval</option>
+                                                <option value="Approved">Approved</option>
+                                                <option value="Rejected">Rejected</option>
+                                            </select>
+                                        </div>
+                                        <div class="mb-3" id="approvedAmountDiv{{ claim.id }}">
+                                            <label class="form-label fw-medium">Approved Amount (₹)</label>
+                                            <input type="number" step="0.01" name="approved_amount" class="form-control" placeholder="0.00" value="{{ claim.claim_amount }}">
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                                        <button type="submit" class="btn btn-primary">Submit Review</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                    <script>
+                    function toggleApprovedAmountInput(claimId) {
+                        var status = document.getElementById("claimStatusSelect" + claimId).value;
+                        var approvedDiv = document.getElementById("approvedAmountDiv" + claimId);
+                        var approvedInput = approvedDiv.querySelector("input");
+                        if (status === "Approved") {
+                            approvedDiv.style.display = "block";
+                            approvedInput.required = true;
+                        } else {
+                            approvedDiv.style.display = "none";
+                            approvedInput.required = false;
+                        }
+                    }
+                    // Initial check
+                    toggleApprovedAmountInput({{ claim.id }});
+                    </script>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="text-center py-5 text-muted">
+                            <i class="bi bi-shield-lock fs-2 d-block mb-2 text-muted"></i>
+                            No insurance claims filed.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: File Claim -->
+<div class="modal fade" id="newClaimModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold">Initiate Insurance Claim</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('add_claim') }}">
+                <div class="modal-body">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Select Admitted Patient</label>
+                        <select name="patient_id" class="form-select" required>
+                            <option value="">-- Choose Patient --</option>
+                            {% for p in patients %}
+                            <option value="{{ p.id }}">{{ p.name }} (Room {{ p.room.room_number if p.room else 'Ward ' ~ p.ward.ward_number }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Insurance Company / Provider</label>
+                        <input type="text" name="insurance_provider" class="form-control" placeholder="e.g. Star Health, HDFC Ergo" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Policy Number</label>
+                        <input type="text" name="policy_number" class="form-control" placeholder="e.g. POL-9876543" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Claim Amount (₹)</label>
+                        <input type="number" step="0.01" name="claim_amount" class="form-control" placeholder="50000.00" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">File Claim</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

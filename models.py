@@ -223,3 +223,133 @@ class Prescription(db.Model):
 
     def __repr__(self):
         return f'<Prescription {self.id}: Medicine {self.medicine_id} for Patient {self.patient_id}>'
+
+
+# ── Lab Tests ────────────────────────────────────────────────────────────────
+class LabTest(db.Model):
+    __tablename__ = 'lab_tests'
+
+    id = db.Column(db.Integer, primary_key=True)
+    patient_id = db.Column(db.Integer, db.ForeignKey('patients.id'), nullable=False)
+    test_name = db.Column(db.String(100), nullable=False)
+    category = db.Column(db.String(50), nullable=False) # e.g. Blood, Radiology, Urine
+    cost = db.Column(db.Float, default=0.0)
+    result = db.Column(db.Text)
+    status = db.Column(db.String(20), default='Pending') # Pending, Completed
+    date = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relationships
+    patient = db.relationship('Patient', backref=db.backref('lab_tests', lazy=True, cascade="all, delete-orphan"))
+
+    def __repr__(self):
+        return f'<LabTest {self.test_name} for Patient {self.patient_id}>'
+
+
+# ── Ambulances ───────────────────────────────────────────────────────────────
+class Ambulance(db.Model):
+    __tablename__ = 'ambulances'
+
+    id = db.Column(db.Integer, primary_key=True)
+    vehicle_number = db.Column(db.String(20), unique=True, nullable=False)
+    driver_name = db.Column(db.String(100), nullable=False)
+    driver_contact = db.Column(db.String(20), nullable=False)
+    status = db.Column(db.String(20), default='Available') # Available, On Duty, Maintenance
+
+    # Relationships
+    bookings = db.relationship('AmbulanceBooking', backref='ambulance', lazy=True)
+
+    def __repr__(self):
+        return f'<Ambulance {self.vehicle_number}>'
+
+
+# ── Ambulance Bookings ────────────────────────────────────────────────────────
+class AmbulanceBooking(db.Model):
+    __tablename__ = 'ambulance_bookings'
+
+    id = db.Column(db.Integer, primary_key=True)
+    ambulance_id = db.Column(db.Integer, db.ForeignKey('ambulances.id'), nullable=False)
+    patient_name = db.Column(db.String(100), nullable=False)
+    destination = db.Column(db.String(200), nullable=False)
+    booking_date = db.Column(db.DateTime, default=datetime.utcnow)
+    charges = db.Column(db.Float, default=0.0)
+    status = db.Column(db.String(20), default='Dispatched') # Dispatched, Completed, Cancelled
+
+    def __repr__(self):
+        return f'<AmbulanceBooking {self.id}>'
+
+
+# ── Duty Roster ──────────────────────────────────────────────────────────────
+class DutyRoster(db.Model):
+    __tablename__ = 'duty_roster'
+
+    id = db.Column(db.Integer, primary_key=True)
+    staff_type = db.Column(db.String(20), nullable=False) # doctor, nurse
+    staff_id = db.Column(db.Integer, nullable=False) # ID of doctor or nurse
+    shift_date = db.Column(db.Date, nullable=False)
+    shift_type = db.Column(db.String(20), nullable=False) # Morning, Afternoon, Night
+    ward_id = db.Column(db.Integer, db.ForeignKey('wards.id'), nullable=True)
+    status = db.Column(db.String(20), default='Scheduled') # Scheduled, Completed, Absent
+
+    # Relationship
+    ward = db.relationship('Ward', backref=db.backref('rosters', lazy=True))
+
+    def __repr__(self):
+        return f'<DutyRoster {self.staff_type} {self.staff_id} on {self.shift_date}>'
+
+
+# ── Visitor Logs ─────────────────────────────────────────────────────────────
+class VisitorLog(db.Model):
+    __tablename__ = 'visitor_logs'
+
+    id = db.Column(db.Integer, primary_key=True)
+    patient_id = db.Column(db.Integer, db.ForeignKey('patients.id'), nullable=False)
+    visitor_name = db.Column(db.String(100), nullable=False)
+    contact = db.Column(db.String(20), nullable=False)
+    relationship = db.Column(db.String(50), nullable=False)
+    pass_number = db.Column(db.String(50), unique=True, nullable=False)
+    check_in_time = db.Column(db.DateTime, default=datetime.utcnow)
+    check_out_time = db.Column(db.DateTime, nullable=True)
+    status = db.Column(db.String(20), default='Active') # Active, Checked Out
+
+    # Relationship
+    patient = db.relationship('Patient', backref=db.backref('visitor_logs', lazy=True, cascade="all, delete-orphan"))
+
+    def __repr__(self):
+        return f'<VisitorLog {self.visitor_name} for Patient {self.patient_id}>'
+
+
+# ── Insurance Claims ─────────────────────────────────────────────────────────
+class InsuranceClaim(db.Model):
+    __tablename__ = 'insurance_claims'
+
+    id = db.Column(db.Integer, primary_key=True)
+    patient_id = db.Column(db.Integer, db.ForeignKey('patients.id'), nullable=False)
+    insurance_provider = db.Column(db.String(100), nullable=False)
+    policy_number = db.Column(db.String(50), nullable=False)
+    claim_amount = db.Column(db.Float, default=0.0)
+    approved_amount = db.Column(db.Float, default=0.0)
+    status = db.Column(db.String(30), default='Initiated') # Initiated, Pending Approval, Approved, Rejected
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relationship
+    patient = db.relationship('Patient', backref=db.backref('insurance_claims', lazy=True, cascade="all, delete-orphan"))
+
+    def __repr__(self):
+        return f'<InsuranceClaim {self.policy_number} for Patient {self.patient_id}>'
+
+
+# ── Feedbacks ────────────────────────────────────────────────────────────────
+class Feedback(db.Model):
+    __tablename__ = 'feedbacks'
+
+    id = db.Column(db.Integer, primary_key=True)
+    patient_name = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(120), nullable=False)
+    rating = db.Column(db.Integer, nullable=False) # 1 to 5
+    category = db.Column(db.String(50), nullable=False) # e.g. Doctors, Nurses, Cleanliness, Billing, Overall
+    comments = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<Feedback from {self.patient_name} - {self.rating} stars>'
+

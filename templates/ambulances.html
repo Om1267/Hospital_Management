@@ -1,0 +1,324 @@
+{% extends 'base.html' %}
+
+{% block title %}Ambulance Management{% endblock %}
+{% block page_title %}Ambulances{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h3 mb-0 text-gray-800">🚑 Ambulance & Emergency Services</h1>
+        <p class="text-muted mb-0">Manage fleet tracking and emergency booking requests</p>
+    </div>
+    <div class="d-flex gap-2">
+        <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#addAmbulanceModal">
+            <i class="bi bi-plus-lg me-1"></i> Add Ambulance
+        </button>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#bookAmbulanceModal">
+            <i class="bi bi-telephone-outbound me-1"></i> Dispatch Ambulance
+        </button>
+    </div>
+</div>
+
+<!-- Fleet Stats -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm p-3 bg-white">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="text-muted small fw-semibold">Total Fleet</div>
+                    <div class="h3 fw-bold mb-0 mt-1 text-primary">{{ fleet_stats.total }}</div>
+                </div>
+                <div class="p-3 bg-primary-subtle text-primary rounded-3">
+                    <i class="bi bi-truck fs-4"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm p-3 bg-white">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="text-muted small fw-semibold">Available</div>
+                    <div class="h3 fw-bold mb-0 mt-1 text-success">{{ fleet_stats.available }}</div>
+                </div>
+                <div class="p-3 bg-success-subtle text-success rounded-3">
+                    <i class="bi bi-check-circle-fill fs-4"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm p-3 bg-white">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="text-muted small fw-semibold">On Duty</div>
+                    <div class="h3 fw-bold mb-0 mt-1 text-warning">{{ fleet_stats.on_duty }}</div>
+                </div>
+                <div class="p-3 bg-warning-subtle text-warning rounded-3">
+                    <i class="bi bi-exclamation-triangle-fill fs-4"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm p-3 bg-white">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="text-muted small fw-semibold">Maintenance</div>
+                    <div class="h3 fw-bold mb-0 mt-1 text-danger">{{ fleet_stats.maintenance }}</div>
+                </div>
+                <div class="p-3 bg-danger-subtle text-danger rounded-3">
+                    <i class="bi bi-wrench-adjustable fs-4"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tabs -->
+<ul class="nav nav-tabs border-bottom mb-4" id="ambulanceTabs" role="tablist">
+    <li class="nav-item">
+        <button class="nav-link active" id="fleet-tab" data-bs-toggle="tab" data-bs-target="#fleet" type="button">
+            <i class="bi bi-grid-3x3-gap me-1"></i> Fleet Status
+        </button>
+    </li>
+    <li class="nav-item">
+        <button class="nav-link" id="bookings-tab" data-bs-toggle="tab" data-bs-target="#bookings" type="button">
+            <i class="bi bi-list-columns-reverse me-1"></i> Dispatch Log
+        </button>
+    </li>
+</ul>
+
+<div class="tab-content" id="ambulanceTabsContent">
+    <!-- Tab 1: Fleet Status Grid -->
+    <div class="tab-pane fade show active" id="fleet" role="tabpanel">
+        <div class="row g-3">
+            {% for amb in ambulances %}
+            <div class="col-md-4">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-3">
+                            <div>
+                                <h5 class="fw-bold mb-1">{{ amb.vehicle_number }}</h5>
+                                <span class="badge 
+                                    {% if amb.status == 'Available' %}bg-success-subtle text-success
+                                    {% elif amb.status == 'On Duty' %}bg-warning-subtle text-warning
+                                    {% else %}bg-danger-subtle text-danger{% endif %}">
+                                    {{ amb.status }}
+                                </span>
+                            </div>
+                            <button class="btn btn-sm btn-light border-0" data-bs-toggle="modal" data-bs-target="#editAmbulanceModal{{ amb.id }}">
+                                <i class="bi bi-pencil-square"></i>
+                            </button>
+                        </div>
+                        <div class="small text-muted mb-2">
+                            <i class="bi bi-person me-2"></i><strong>Driver:</strong> {{ amb.driver_name }}
+                        </div>
+                        <div class="small text-muted">
+                            <i class="bi bi-telephone me-2"></i><strong>Contact:</strong> {{ amb.driver_contact }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Edit Ambulance Modal -->
+            <div class="modal fade" id="editAmbulanceModal{{ amb.id }}" tabindex="-1">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title fw-bold">Edit Vehicle Status</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <form method="POST" action="{{ url_for('edit_ambulance', ambulance_id=amb.id) }}">
+                            <div class="modal-body">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <div class="mb-3">
+                                    <label class="form-label fw-medium">Vehicle Number</label>
+                                    <input type="text" name="vehicle_number" class="form-control" value="{{ amb.vehicle_number }}" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-medium">Driver Name</label>
+                                    <input type="text" name="driver_name" class="form-control" value="{{ amb.driver_name }}" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-medium">Driver Contact</label>
+                                    <input type="text" name="driver_contact" class="form-control" value="{{ amb.driver_contact }}" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-medium">Status</label>
+                                    <select name="status" class="form-select" required>
+                                        <option value="Available" {% if amb.status == 'Available' %}selected{% endif %}>Available</option>
+                                        <option value="On Duty" {% if amb.status == 'On Duty' %}selected{% endif %}>On Duty</option>
+                                        <option value="Maintenance" {% if amb.status == 'Maintenance' %}selected{% endif %}>Maintenance</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                                <button type="submit" class="btn btn-primary">Save Changes</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="col-12 text-center py-5 text-muted">
+                <i class="bi bi-truck fs-1 d-block mb-3 text-muted"></i>
+                No vehicles configured in the ambulance fleet.
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Tab 2: Dispatch Log -->
+    <div class="tab-pane fade" id="bookings" role="tabpanel">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-4">Booking ID</th>
+                                <th>Ambulance</th>
+                                <th>Patient Name</th>
+                                <th>Destination</th>
+                                <th>Booking Date</th>
+                                <th>Charges</th>
+                                <th>Status</th>
+                                <th class="text-end pe-4">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for booking in bookings %}
+                            <tr>
+                                <td class="ps-4 fw-bold text-dark">#{{ booking.id }}</td>
+                                <td>
+                                    <div class="fw-semibold">{{ booking.ambulance.vehicle_number }}</div>
+                                    <div class="small text-muted">{{ booking.ambulance.driver_name }}</div>
+                                </td>
+                                <td>{{ booking.patient_name }}</td>
+                                <td>{{ booking.destination }}</td>
+                                <td class="text-muted">{{ booking.booking_date.strftime('%d %b %Y, %H:%M') }}</td>
+                                <td class="fw-semibold">₹{{ "%.2f"|format(booking.charges) }}</td>
+                                <td>
+                                    <span class="badge 
+                                        {% if booking.status == 'Completed' %}bg-success-subtle text-success
+                                        {% elif booking.status == 'Cancelled' %}bg-secondary-subtle text-secondary
+                                        {% else %}bg-warning-subtle text-warning{% endif %}">
+                                        {{ booking.status }}
+                                    </span>
+                                </td>
+                                <td class="text-end pe-4">
+                                    {% if booking.status == 'Dispatched' %}
+                                    <form method="POST" action="{{ url_for('complete_booking', booking_id=booking.id, action='Completed') }}" class="d-inline">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn btn-sm btn-success">Complete</button>
+                                    </form>
+                                    <form method="POST" action="{{ url_for('complete_booking', booking_id=booking.id, action='Cancelled') }}" class="d-inline ms-1">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">Cancel</button>
+                                    </form>
+                                    {% else %}
+                                    <span class="text-muted small">Closed</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="8" class="text-center py-4 text-muted">
+                                    No dispatch bookings recorded.
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Add Ambulance -->
+<div class="modal fade" id="addAmbulanceModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold">Register New Ambulance</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('add_ambulance') }}">
+                <div class="modal-body">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Vehicle Plate Number</label>
+                        <input type="text" name="vehicle_number" class="form-control" placeholder="e.g. DL-1CA-1234" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Driver Name</label>
+                        <input type="text" name="driver_name" class="form-control" placeholder="e.g. Suresh Prasad" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Driver Contact Number</label>
+                        <input type="text" name="driver_contact" class="form-control" placeholder="e.g. 9876543210" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Status</label>
+                        <select name="status" class="form-select">
+                            <option value="Available">Available</option>
+                            <option value="Maintenance">Maintenance</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Register Vehicle</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Book/Dispatch Ambulance -->
+<div class="modal fade" id="bookAmbulanceModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold">Dispatch Emergency Transport</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('book_ambulance') }}">
+                <div class="modal-body">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Select Available Ambulance</label>
+                        <select name="ambulance_id" class="form-select" required>
+                            <option value="">-- Select Available Vehicle --</option>
+                            {% for amb in ambulances %}
+                            {% if amb.status == 'Available' %}
+                            <option value="{{ amb.id }}">{{ amb.vehicle_number }} - {{ amb.driver_name }}</option>
+                            {% endif %}
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Patient Name</label>
+                        <input type="text" name="patient_name" class="form-control" placeholder="e.g. Ramesh Kumar or Emergency Case" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Destination / Pickup Address</label>
+                        <input type="text" name="destination" class="form-control" placeholder="e.g. Sector-15, Rohini, New Delhi" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Estimated Charges (₹)</label>
+                        <input type="number" step="0.01" name="charges" class="form-control" placeholder="1500.00" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Dispatch Now</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

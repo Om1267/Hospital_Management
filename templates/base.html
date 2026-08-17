@@ -68,6 +68,36 @@
                 <i class="bi bi-receipt-cutoff"></i> Billing
             </a>
         </li>
+        <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('lab_tests') }}">
+                <i class="bi bi-flask"></i> Lab Tests
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('ambulances') }}">
+                <i class="bi bi-truck"></i> Ambulances
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('duty_roster') }}">
+                <i class="bi bi-people-fill"></i> Duty Roster
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('visitor_logs') }}">
+                <i class="bi bi-card-list"></i> Visitor Logs
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('insurance_claims') }}">
+                <i class="bi bi-shield-check"></i> Insurance Claims
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('patient_feedback') }}">
+                <i class="bi bi-star-fill"></i> Feedback
+            </a>
+        </li>
         {% if current_user.role == 'admin' %}
         <li class="nav-item">
             <a class="nav-link" href="{{ url_for('reports') }}">

@@ -28,7 +28,7 @@ from wtforms import (
 from wtforms.validators import DataRequired, Email, Length, Optional, NumberRange
 from werkzeug.security import generate_password_hash, check_password_hash
 
-from models import db, User, Doctor, Nurse, Ward, Room, Patient, Appointment, Medicine, Bill, Prescription
+from models import db, User, Doctor, Nurse, Ward, Room, Patient, Appointment, Medicine, Bill, Prescription, LabTest, Ambulance, AmbulanceBooking, DutyRoster, VisitorLog, InsuranceClaim, Feedback
 from config import Config
 
 from flask_wtf.csrf import CSRFProtect
@@ -1470,6 +1470,546 @@ def bill_pdf(bill_id):
     )
 
 
+# ─── Lab Tests Routes ─────────────────────────────────────────────────────────
+@app.route('/lab_tests')
+@login_required
+def lab_tests():
+    search = request.args.get('search', '')
+    category = request.args.get('category', '')
+    status = request.args.get('status', '')
+
+    query = LabTest.query
+    if search:
+        query = query.join(Patient).filter(
+            (Patient.name.like(f'%{search}%')) | (LabTest.test_name.like(f'%{search}%'))
+        )
+    if category:
+        query = query.filter(LabTest.category == category)
+    if status:
+        query = query.filter(LabTest.status == status)
+
+    tests = query.order_by(LabTest.date.desc()).all()
+    patients = Patient.query.filter_by(status='Admitted').all()
+
+    # Calculate stats
+    total = LabTest.query.count()
+    completed = LabTest.query.filter_by(status='Completed').count()
+    pending = LabTest.query.filter_by(status='Pending').count()
+    stats = {'total': total, 'completed': completed, 'pending': pending}
+
+    return render_template('lab_tests.html', tests=tests, patients=patients, stats=stats)
+
+
+@app.route('/lab_tests/add', methods=['POST'])
+@login_required
+def add_lab_test():
+    f = request.form
+    patient_id = int(f.get('patient_id'))
+    test_name = f.get('test_name')
+    category = f.get('category')
+    cost = float(f.get('cost', 0.0))
+
+    patient = Patient.query.get_or_404(patient_id)
+
+    test = LabTest(
+        patient_id=patient_id,
+        test_name=test_name,
+        category=category,
+        cost=cost,
+        status='Pending'
+    )
+    db.session.add(test)
+
+    # Billing Integration
+    bill = Bill.query.filter_by(patient_id=patient.id, payment_status='Pending').first()
+    item_cost = round(cost, 2)
+    desc = f"Lab Test: {test_name}"
+    if bill:
+        items = json.loads(bill.items_json) if bill.items_json else []
+        items.append({'description': desc, 'amount': item_cost})
+        bill.items_json = json.dumps(items)
+        bill.subtotal = round(bill.subtotal + item_cost, 2)
+        bill.gst = round(bill.subtotal * 0.05, 2)
+        bill.total = round(bill.subtotal + bill.gst - bill.discount, 2)
+    else:
+        bill_number = f'BILL{datetime.datetime.utcnow().strftime("%Y%m%d%H%M%S")}'
+        items = [{'description': desc, 'amount': item_cost}]
+        subtotal = item_cost
+        gst = round(subtotal * 0.05, 2)
+        bill = Bill(
+            bill_number=bill_number,
+            bill_type='Hospital',
+            patient_id=patient.id,
+            items_json=json.dumps(items),
+            subtotal=subtotal,
+            gst=gst,
+            discount=0.0,
+            total=round(subtotal + gst, 2),
+            payment_status='Pending'
+        )
+        db.session.add(bill)
+
+    redirect_to = f.get('redirect_to')
+    if redirect_to == 'patient_summary':
+        target = url_for('patient_summary', patient_id=patient_id)
+    else:
+        target = url_for('lab_tests')
+
+    return commit_or_rollback('Lab test requested successfully and added to patient bill.', 'Failed to add lab test', target)
+
+
+@app.route('/lab_tests/<int:test_id>/update', methods=['POST'])
+@login_required
+def update_lab_test(test_id):
+    test = LabTest.query.get_or_404(test_id)
+    result = request.form.get('result')
+    test.result = result
+    test.status = 'Completed'
+    return commit_or_rollback('Test result updated successfully.', 'Failed to update test result', url_for('lab_tests'))
+
+
+@app.route('/lab_tests/<int:test_id>/delete', methods=['POST'])
+@login_required
+def delete_lab_test(test_id):
+    test = LabTest.query.get_or_404(test_id)
+    db.session.delete(test)
+    return commit_or_rollback('Lab test deleted successfully.', 'Failed to delete lab test', url_for('lab_tests'))
+
+
+# ─── Ambulances Routes ────────────────────────────────────────────────────────
+@app.route('/ambulances')
+@login_required
+def ambulances():
+    ambulances = Ambulance.query.all()
+    bookings = AmbulanceBooking.query.order_by(AmbulanceBooking.booking_date.desc()).all()
+    
+    # Calculate fleet stats
+    total = Ambulance.query.count()
+    available = Ambulance.query.filter_by(status='Available').count()
+    on_duty = Ambulance.query.filter_by(status='On Duty').count()
+    maintenance = Ambulance.query.filter_by(status='Maintenance').count()
+    
+    fleet_stats = {
+        'total': total,
+        'available': available,
+        'on_duty': on_duty,
+        'maintenance': maintenance
+    }
+    
+    return render_template('ambulances.html', ambulances=ambulances, bookings=bookings, fleet_stats=fleet_stats)
+
+
+@app.route('/ambulances/add', methods=['POST'])
+@login_required
+def add_ambulance():
+    f = request.form
+    vehicle_number = f.get('vehicle_number')
+    driver_name = f.get('driver_name')
+    driver_contact = f.get('driver_contact')
+    status = f.get('status', 'Available')
+
+    amb = Ambulance(
+        vehicle_number=vehicle_number,
+        driver_name=driver_name,
+        driver_contact=driver_contact,
+        status=status
+    )
+    db.session.add(amb)
+    return commit_or_rollback('Ambulance added successfully.', 'Failed to add ambulance', url_for('ambulances'))
+
+
+@app.route('/ambulances/<int:ambulance_id>/edit', methods=['POST'])
+@login_required
+def edit_ambulance(ambulance_id):
+    amb = Ambulance.query.get_or_404(ambulance_id)
+    f = request.form
+    amb.vehicle_number = f.get('vehicle_number')
+    amb.driver_name = f.get('driver_name')
+    amb.driver_contact = f.get('driver_contact')
+    amb.status = f.get('status')
+    return commit_or_rollback('Ambulance details updated.', 'Failed to update ambulance', url_for('ambulances'))
+
+
+@app.route('/ambulances/book', methods=['POST'])
+@login_required
+def book_ambulance():
+    f = request.form
+    ambulance_id = int(f.get('ambulance_id'))
+    patient_name = f.get('patient_name')
+    destination = f.get('destination')
+    charges = float(f.get('charges', 0.0))
+
+    amb = Ambulance.query.get_or_404(ambulance_id)
+    if amb.status != 'Available':
+        flash('Ambulance is not available.', 'danger')
+        return redirect(url_for('ambulances'))
+
+    booking = AmbulanceBooking(
+        ambulance_id=ambulance_id,
+        patient_name=patient_name,
+        destination=destination,
+        charges=charges,
+        status='Dispatched'
+    )
+    amb.status = 'On Duty'
+    db.session.add(booking)
+
+    # Billing Integration
+    patient = Patient.query.filter_by(name=patient_name, status='Admitted').first()
+    if patient:
+        bill = Bill.query.filter_by(patient_id=patient.id, payment_status='Pending').first()
+        item_cost = round(charges, 2)
+        desc = f"Ambulance Service to {destination}"
+        if bill:
+            items = json.loads(bill.items_json) if bill.items_json else []
+            items.append({'description': desc, 'amount': item_cost})
+            bill.items_json = json.dumps(items)
+            bill.subtotal = round(bill.subtotal + item_cost, 2)
+            bill.gst = round(bill.subtotal * 0.05, 2)
+            bill.total = round(bill.subtotal + bill.gst - bill.discount, 2)
+        else:
+            bill_number = f'BILL{datetime.datetime.utcnow().strftime("%Y%m%d%H%M%S")}'
+            items = [{'description': desc, 'amount': item_cost}]
+            subtotal = item_cost
+            gst = round(subtotal * 0.05, 2)
+            bill = Bill(
+                bill_number=bill_number,
+                bill_type='Hospital',
+                patient_id=patient.id,
+                items_json=json.dumps(items),
+                subtotal=subtotal,
+                gst=gst,
+                discount=0.0,
+                total=round(subtotal + gst, 2),
+                payment_status='Pending'
+            )
+            db.session.add(bill)
+
+    return commit_or_rollback('Ambulance dispatched successfully.', 'Failed to create booking', url_for('ambulances'))
+
+
+@app.route('/ambulances/booking/<int:booking_id>/complete', methods=['POST'])
+@login_required
+def complete_booking(booking_id):
+    action = request.args.get('action', 'Completed')
+    booking = AmbulanceBooking.query.get_or_404(booking_id)
+    booking.status = action
+    booking.ambulance.status = 'Available'
+    return commit_or_rollback(f'Ambulance booking marked as {action}.', 'Failed to update booking status', url_for('ambulances'))
+
+
+# ─── Duty Roster Routes ───────────────────────────────────────────────────────
+@app.route('/roster')
+@login_required
+def duty_roster():
+    selected_date = request.args.get('date', datetime.date.today().strftime('%Y-%m-%d'))
+    staff_type = request.args.get('staff_type', '')
+    shift_type = request.args.get('shift_type', '')
+
+    query = DutyRoster.query.filter(DutyRoster.shift_date == datetime.datetime.strptime(selected_date, '%Y-%m-%d').date())
+    if staff_type:
+        query = query.filter(DutyRoster.staff_type == staff_type)
+    if shift_type:
+        query = query.filter(DutyRoster.shift_type == shift_type)
+
+    roster = query.all()
+    
+    roster_entries = []
+    for entry in roster:
+        staff_name = "Unknown"
+        staff_contact = "—"
+        if entry.staff_type == 'doctor':
+            doc = db.session.get(Doctor, entry.staff_id)
+            if doc:
+                staff_name = doc.name
+                staff_contact = doc.contact
+        elif entry.staff_type == 'nurse':
+            nurse = db.session.get(Nurse, entry.staff_id)
+            if nurse:
+                staff_name = nurse.name
+                staff_contact = nurse.contact
+        roster_entries.append({
+            'entry': entry,
+            'staff_name': staff_name,
+            'staff_contact': staff_contact
+        })
+
+    doctors = Doctor.query.all()
+    nurses = Nurse.query.all()
+    wards = Ward.query.all()
+
+    return render_template(
+        'roster.html', 
+        roster_entries=roster_entries, 
+        selected_date=selected_date,
+        doctors=doctors,
+        nurses=nurses,
+        wards=wards,
+        datetime=datetime
+    )
+
+
+@app.route('/roster/add', methods=['POST'])
+@login_required
+def add_roster_entry():
+    f = request.form
+    shift_date_str = f.get('shift_date')
+    staff_type = f.get('staff_type')
+    shift_type = f.get('shift_type')
+    ward_id_str = f.get('ward_id')
+
+    shift_date = datetime.datetime.strptime(shift_date_str, '%Y-%m-%d').date()
+    ward_id = int(ward_id_str) if ward_id_str else None
+
+    if staff_type == 'doctor':
+        staff_id = int(f.get('doctor_id'))
+    else:
+        staff_id = int(f.get('nurse_id'))
+
+    exists = DutyRoster.query.filter_by(
+        staff_type=staff_type,
+        staff_id=staff_id,
+        shift_date=shift_date,
+        shift_type=shift_type
+    ).first()
+
+    if exists:
+        flash('This staff member is already scheduled for this shift.', 'warning')
+        return redirect(url_for('duty_roster', date=shift_date_str))
+
+    entry = DutyRoster(
+        staff_type=staff_type,
+        staff_id=staff_id,
+        shift_date=shift_date,
+        shift_type=shift_type,
+        ward_id=ward_id,
+        status='Scheduled'
+    )
+    db.session.add(entry)
+    return commit_or_rollback('Shift scheduled successfully.', 'Failed to schedule shift', url_for('duty_roster', date=shift_date_str))
+
+
+@app.route('/roster/<int:roster_id>/update', methods=['POST'])
+@login_required
+def update_roster_status(roster_id):
+    entry = DutyRoster.query.get_or_404(roster_id)
+    status = request.args.get('status')
+    entry.status = status
+    return commit_or_rollback('Shift status updated.', 'Failed to update shift status', url_for('duty_roster', date=entry.shift_date.strftime('%Y-%m-%d')))
+
+
+@app.route('/roster/<int:roster_id>/delete', methods=['POST'])
+@login_required
+def delete_roster_entry(roster_id):
+    entry = DutyRoster.query.get_or_404(roster_id)
+    date_str = entry.shift_date.strftime('%Y-%m-%d')
+    db.session.delete(entry)
+    return commit_or_rollback('Shift removed from roster.', 'Failed to delete roster entry', url_for('duty_roster', date=date_str))
+
+
+# ─── Visitor Logs Routes ──────────────────────────────────────────────────────
+@app.route('/visitors')
+@login_required
+def visitor_logs():
+    search = request.args.get('search', '')
+    active_visitors = VisitorLog.query.filter_by(status='Active').order_by(VisitorLog.check_in_time.desc()).all()
+    
+    query = VisitorLog.query.filter(VisitorLog.status == 'Checked Out')
+    if search:
+        query = query.join(Patient).filter(
+            (VisitorLog.visitor_name.like(f'%{search}%')) | 
+            (VisitorLog.pass_number.like(f'%{search}%')) |
+            (Patient.name.like(f'%{search}%'))
+        )
+    history_visitors = query.order_by(VisitorLog.check_out_time.desc()).all()
+    patients = Patient.query.filter_by(status='Admitted').all()
+    
+    return render_template('visitors.html', active_visitors=active_visitors, history_visitors=history_visitors, patients=patients)
+
+
+@app.route('/visitors/checkin', methods=['POST'])
+@login_required
+def visitor_checkin():
+    f = request.form
+    patient_id = int(f.get('patient_id'))
+    visitor_name = f.get('visitor_name')
+    contact = f.get('contact')
+    relationship = f.get('relationship')
+
+    pass_number = f'PASS-{datetime.datetime.utcnow().strftime("%Y%m%d%H%M%S")}'
+
+    log = VisitorLog(
+        patient_id=patient_id,
+        visitor_name=visitor_name,
+        contact=contact,
+        relationship=relationship,
+        pass_number=pass_number,
+        status='Active'
+    )
+    db.session.add(log)
+
+    redirect_to = f.get('redirect_to')
+    if redirect_to == 'patient_summary':
+        target = url_for('patient_summary', patient_id=patient_id)
+    else:
+        target = url_for('visitor_logs')
+
+    return commit_or_rollback(f'Visitor pass generated successfully: {pass_number}', 'Failed to check in visitor', target)
+
+
+@app.route('/visitors/<int:log_id>/checkout', methods=['POST'])
+@login_required
+def visitor_checkout(log_id):
+    log = VisitorLog.query.get_or_404(log_id)
+    log.check_out_time = datetime.datetime.utcnow()
+    log.status = 'Checked Out'
+    return commit_or_rollback('Visitor checked out successfully.', 'Failed to check out visitor', url_for('visitor_logs'))
+
+
+# ─── Insurance Claims Routes ──────────────────────────────────────────────────
+@app.route('/claims')
+@login_required
+def insurance_claims():
+    claims = InsuranceClaim.query.order_by(InsuranceClaim.created_at.desc()).all()
+    patients = Patient.query.filter_by(status='Admitted').all()
+
+    # Calculate claim stats
+    total_count = InsuranceClaim.query.count()
+    approved_count = InsuranceClaim.query.filter_by(status='Approved').count()
+    
+    pending_claims = InsuranceClaim.query.filter(InsuranceClaim.status.in_(['Initiated', 'Pending Approval'])).all()
+    pending_amount = sum(c.claim_amount for c in pending_claims)
+    
+    approved_claims = InsuranceClaim.query.filter_by(status='Approved').all()
+    approved_amount = sum(c.approved_amount for c in approved_claims)
+
+    claim_stats = {
+        'total_count': total_count,
+        'approved_count': approved_count,
+        'pending_amount': pending_amount,
+        'approved_amount': approved_amount
+    }
+
+    return render_template('claims.html', claims=claims, patients=patients, claim_stats=claim_stats)
+
+
+@app.route('/claims/add', methods=['POST'])
+@login_required
+def add_claim():
+    f = request.form
+    patient_id = int(f.get('patient_id'))
+    insurance_provider = f.get('insurance_provider')
+    policy_number = f.get('policy_number')
+    claim_amount = float(f.get('claim_amount', 0.0))
+
+    claim = InsuranceClaim(
+        patient_id=patient_id,
+        insurance_provider=insurance_provider,
+        policy_number=policy_number,
+        claim_amount=claim_amount,
+        status='Initiated'
+    )
+    db.session.add(claim)
+
+    redirect_to = f.get('redirect_to')
+    if redirect_to == 'patient_summary':
+        target = url_for('patient_summary', patient_id=patient_id)
+    else:
+        target = url_for('insurance_claims')
+
+    return commit_or_rollback('Insurance claim filed successfully.', 'Failed to file claim', target)
+
+
+@app.route('/claims/<int:claim_id>/update', methods=['POST'])
+@login_required
+def update_claim(claim_id):
+    claim = InsuranceClaim.query.get_or_404(claim_id)
+    f = request.form
+    status = f.get('status')
+    
+    claim.status = status
+    if status == 'Approved':
+        claim.approved_amount = float(f.get('approved_amount', 0.0))
+        # Billing Integration: Deduct approved amount from the patient's pending bill
+        bill = Bill.query.filter_by(patient_id=claim.patient_id, payment_status='Pending').first()
+        if bill:
+            desc = f"Insurance Cover: {claim.insurance_provider} ({claim.policy_number})"
+            items = json.loads(bill.items_json) if bill.items_json else []
+            items.append({'description': desc, 'amount': -round(claim.approved_amount, 2)})
+            bill.items_json = json.dumps(items)
+            bill.subtotal = round(bill.subtotal - claim.approved_amount, 2)
+            bill.gst = round(bill.subtotal * 0.05, 2)
+            bill.total = round(bill.subtotal + bill.gst - bill.discount, 2)
+    elif status == 'Rejected':
+        claim.approved_amount = 0.0
+
+    return commit_or_rollback('Claim status updated successfully.', 'Failed to update claim', url_for('insurance_claims'))
+
+
+@app.route('/claims/<int:claim_id>/delete', methods=['POST'])
+@login_required
+def delete_claim(claim_id):
+    claim = InsuranceClaim.query.get_or_404(claim_id)
+    db.session.delete(claim)
+    return commit_or_rollback('Insurance claim entry deleted.', 'Failed to delete claim', url_for('insurance_claims'))
+
+
+# ─── Feedback Routes ──────────────────────────────────────────────────────────
+@app.route('/feedback')
+@login_required
+def patient_feedback():
+    reviews = Feedback.query.order_by(Feedback.created_at.desc()).all()
+    
+    # Calculate average rating and category rating stats
+    total = Feedback.query.count()
+    avg_rating = sum(r.rating for r in reviews) / total if total > 0 else 0.0
+    
+    categories = ['Overall', 'Doctors', 'Nurses', 'Cleanliness', 'Billing']
+    cat_stats = {}
+    for cat in categories:
+        cat_reviews = Feedback.query.filter_by(category=cat).all()
+        cat_count = len(cat_reviews)
+        cat_avg = sum(r.rating for r in cat_reviews) / cat_count if cat_count > 0 else 0.0
+        cat_stats[cat] = {'avg': cat_avg, 'count': cat_count}
+
+    stats = {
+        'total': total,
+        'avg_rating': avg_rating,
+        'cat_stats': cat_stats
+    }
+
+    return render_template('feedback.html', reviews=reviews, stats=stats)
+
+
+@app.route('/feedback/submit', methods=['POST'])
+@login_required
+def submit_feedback():
+    f = request.form
+    patient_name = f.get('patient_name')
+    email = f.get('email')
+    rating = int(f.get('rating', 5))
+    category = f.get('category')
+    comments = f.get('comments')
+
+    feedback = Feedback(
+        patient_name=patient_name,
+        email=email,
+        rating=rating,
+        category=category,
+        comments=comments
+    )
+    db.session.add(feedback)
+    return commit_or_rollback('Feedback submitted successfully. Thank you!', 'Failed to submit feedback', url_for('patient_feedback'))
+
+
+@app.route('/feedback/<int:feedback_id>/delete', methods=['POST'])
+@login_required
+def delete_feedback(feedback_id):
+    feedback = Feedback.query.get_or_404(feedback_id)
+    db.session.delete(feedback)
+    return commit_or_rollback('Feedback entry deleted.', 'Failed to delete feedback', url_for('patient_feedback'))
+
+
 # ─── Seed Data ────────────────────────────────────────────────────────────────
 def seed_data():
     if User.query.first():
@@ -1634,6 +2174,40 @@ def seed_data():
             payment_status='Pending'
         )
         db.session.add(bill)
+
+    # ── Seed Ambulances ──────────────────────────────────────────────────────
+    amb1 = Ambulance(vehicle_number='DL-1CA-1234', driver_name='Rajesh Kumar', driver_contact='9876543210', status='Available')
+    amb2 = Ambulance(vehicle_number='DL-2CB-5678', driver_name='Suresh Prasad', driver_contact='9876543211', status='On Duty')
+    amb3 = Ambulance(vehicle_number='DL-3CC-9012', driver_name='Amit Singh', driver_contact='9876543212', status='Maintenance')
+    db.session.add_all([amb1, amb2, amb3])
+    db.session.flush()
+
+    # ── Seed Ambulance Booking ───────────────────────────────────────────────
+    booking = AmbulanceBooking(ambulance_id=amb2.id, patient_name='Rahul Gupta', destination='Sector-15, Rohini, New Delhi', charges=1200.0, status='Dispatched')
+    db.session.add(booking)
+
+    # ── Seed Lab Tests ───────────────────────────────────────────────────────
+    lt1 = LabTest(patient_id=patients_created[0].id, test_name='Complete Blood Count', category='Blood Test', cost=450.0, status='Completed', result='Hb: 14.2 g/dL, WBC: 6500 /cumm, Platelets: 2.1 Lacs/cumm')
+    lt2 = LabTest(patient_id=patients_created[1].id, test_name='Brain MRI', category='Radiology', cost=5000.0, status='Pending')
+    db.session.add_all([lt1, lt2])
+
+    # ── Seed Duty Roster ─────────────────────────────────────────────────────
+    dr1 = DutyRoster(staff_type='doctor', staff_id=doctors_created[0].id, shift_date=datetime.date.today(), shift_type='Morning', status='Scheduled')
+    dr2 = DutyRoster(staff_type='nurse', staff_id=1, shift_date=datetime.date.today(), shift_type='Morning', ward_id=wards_created[0].id, status='Scheduled')
+    db.session.add_all([dr1, dr2])
+
+    # ── Seed Visitor Logs ────────────────────────────────────────────────────
+    vl = VisitorLog(patient_id=patients_created[0].id, visitor_name='Ramesh Gupta', contact='9988776655', relationship='Parent', pass_number='PASS-20260817001', status='Active')
+    db.session.add(vl)
+
+    # ── Seed Insurance Claims ────────────────────────────────────────────────
+    claim = InsuranceClaim(patient_id=patients_created[1].id, insurance_provider='Star Health Insurance', policy_number='POL-987654', claim_amount=45000.0, status='Initiated')
+    db.session.add(claim)
+
+    # ── Seed Feedback ────────────────────────────────────────────────────────
+    fb1 = Feedback(patient_name='Kavitha Reddy', email='kavitha@example.com', rating=5, category='Doctors', comments='Dr. Arjun Sharma was extremely helpful and professional. Great experience!')
+    fb2 = Feedback(patient_name='Suresh Kumar', email='suresh@example.com', rating=4, category='Cleanliness', comments='Very clean rooms and nice ward assistance.')
+    db.session.add_all([fb1, fb2])
 
     db.session.commit()
     print('[OK] Seed data inserted successfully.')
