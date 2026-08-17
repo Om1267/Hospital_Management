@@ -80,5 +80,11 @@ MIT © 2026
 - Prescription management
 - Ward & bed management
 - Audit logs for all critical actions
+- **Lab Tests**: Category filters, results entry, and billing integration
+- **Ambulance Tracking**: Fleet status dashboard and dispatch management
+- **Duty Roster**: Schedule shifts and wards for doctors and nurses
+- **Visitor Logs**: Generate unique visitor passes and monitor active visits
+- **Insurance Tracker**: Claim filing and automatic billing deduction on approval
+- **Feedback Board**: Average satisfaction metric scores and category breakdowns
 
 
