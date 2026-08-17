@@ -22,3 +22,6 @@ class Config:
     LOG_DIR = os.path.join(basedir, 'logs')
     LOG_FILE = os.path.join(LOG_DIR, 'application.log')
 
+    # Backups
+    BACKUP_DIR = os.path.join(basedir, 'backups')
+
