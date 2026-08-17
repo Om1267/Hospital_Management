@@ -1,10 +1,11 @@
 import os
 import shutil
 import datetime
+from config import Config
 
 def backup_database():
     source_db = 'database.db'
-    backup_dir = 'backups'
+    backup_dir = Config.BACKUP_DIR
     
     if not os.path.exists(source_db):
         print(f"Error: Database file '{source_db}' does not exist.")
